@@ -3,7 +3,6 @@
 
 #include "engine/world/chunk.hpp"
 
-#include "logger/entry.hpp"
 #include "utility/colour_utility.hpp"
 
 #include "common/constant.hpp"
@@ -37,10 +36,7 @@ void Chunk::generate(Generator &generator, HeightMap &height_map) {
 // TODO: Greedy meshing
 // PERF: Binary meshing
 void Chunk::generate_mesh() {
-    // Mesh top face
-    this->_mesh.clear_vertices();
-
-    int index_offset = 0;
+    this->clear_mesh();
 
     for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
         FaceType face_type = static_cast<FaceType>(face_type_index);
@@ -50,646 +46,189 @@ void Chunk::generate_mesh() {
         for (int block_type_index = 0; block_type_index < number_of_blocks; ++block_type_index) {
             BlockType block_type = static_cast<BlockType>(block_type_index);
 
-            std::uint32_t block_masks[config::CHUNK_SIZE];
-
-            for (int block_id = 0; block_id < config::CHUNK_SIZE2; ++block_id) {
-                int block_y = 1;
-                int block_x = 1;
-            }
+            this->merge_faces(block_type, face_type);
         }
     }
 
-    this->merge_X_faces(index_offset);
-    this->merge_Y_faces(index_offset);
-    this->merge_Z_faces(index_offset);
+    int index_offset = 0;
+
+    int total_faces = 0;
+
+    for (Face &face : this->_faces) {
+        face.add_to_mesh(this->_mesh);
+
+        this->_mesh.add_index(0 + index_offset);
+        this->_mesh.add_index(1 + index_offset);
+        this->_mesh.add_index(2 + index_offset);
+        this->_mesh.add_index(2 + index_offset);
+        this->_mesh.add_index(3 + index_offset);
+        this->_mesh.add_index(0 + index_offset);
+
+        ++total_faces;
+
+        index_offset += 4;
+    }
+
+    LOG_DEBUG("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
 
     this->_mesh.upload();
 }
 
-void Chunk::merge_X_faces(int &index_offset) {
-    for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
-        // this->merge_left_faces(index_offset, dx);
-        // this->merge_right_faces(index_offset, dx);
+void Chunk::merge_faces(BlockType &block_type, FaceType &face_type) {
+    if (face_type == FaceType::FRONT || face_type == FaceType::BACK) {
+        this->merge_XY_faces(block_type, face_type);
+    } else if (face_type == FaceType::TOP || face_type == FaceType::BOTTOM) {
+        this->merge_XZ_faces(block_type, face_type);
+    } else {
+        this->merge_YZ_faces(block_type, face_type);
     }
 }
 
-void Chunk::merge_Y_faces(int &index_offset) {
-    for (int dy = 0; dy < config::CHUNK_SIZE; ++dy) {
-        this->merge_top_faces(index_offset, dy);
-        // this->merge_bottom_faces(index_offset, dy);
-    }
-}
-
-void Chunk::merge_Z_faces(int &index_offset) {
-    for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
-        // this->merge_front_faces(index_offset, dz);
-        // this->merge_back_faces(index_offset, dz);
-    }
-}
-
-void Chunk::merge_left_faces(int &index_offset, int dx) {
-    bool visited[config::CHUNK_SIZE][config::CHUNK_SIZE];
-
-    std::memset(visited, false, sizeof(visited));
-
-    // NOTE: Order matters, ZY would be more performant due to locality
-    // However, for the sake of not confusing myself, we use YZ convention
-    for (int dy = 0; dy < config::CHUNK_SIZE; ++dy) {
-        for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
-            if (visited[dy][dz]) {
-                continue;
-            }
-
-            int id = this->get_block_id(dx, dy, dz);
-
-            if (!this->_blocks[id].is_face_active(FaceType::LEFT)) {
-                continue;
-            }
-
-            BlockType &block_type = this->_blocks[id].get_type();
-
-            if (block_type == BlockType::EMPTY) {
-                continue;
-            }
-
-            int depth = 1;
-
-            while (dz + depth < config::CHUNK_SIZE) {
-                int block_id = this->get_block_id(dx, dy, dz + depth);
-
-                Block &block = this->_blocks[block_id];
-
-                if (block.get_type() != block_type || !block.is_face_active(FaceType::LEFT)) {
-                    break;
-                }
-
-                ++depth;
-            }
-
-            int height = 1;
-
-            while (dy + height < config::CHUNK_SIZE) {
-                bool valid = true;
-
-                for (int dd = 0; dd < depth; ++dd) {
-                    int block_id = this->get_block_id(dx, dy + height, dz + dd);
-
-                    Block &block = this->_blocks[block_id];
-
-                    if (block.get_type() != block_type || !block.is_face_active(FaceType::LEFT)) {
-                        valid = false;
-                        break;
-                    }
-                }
-
-                if (!valid) {
-                    break;
-                }
-
-                ++height;
-            }
-
-            for (int ly = 0; ly < height; ++ly) {
-                for (int lz = 0; lz < depth; ++lz) {
-                    visited[dy + ly][dz + lz] = true;
-                }
-            }
-
-            int x = this->global_x + dx;
-            int y = this->global_y + dy;
-            int z = this->global_z + dz;
-
-            int texture_id = static_cast<int>(block_type);
-
-            this->_mesh.add_vertex(x, y, z, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-            this->_mesh.add_vertex(x, y, z + depth, -1.0f, 0.0f, 0.0f, depth, 0.0f);
-            this->_mesh.add_vertex(x, y + height, z + depth, -1.0f, 0.0f, 0.0f, depth, height);
-            this->_mesh.add_vertex(x, y + height, z, -1.0f, 0.0f, 0.0f, 0.0f, height);
-
-            this->_mesh.add_index(0 + index_offset);
-            this->_mesh.add_index(1 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(3 + index_offset);
-            this->_mesh.add_index(0 + index_offset);
-
-            index_offset += 4;
-        }
-    }
-}
-
-void Chunk::merge_right_faces(int &index_offset, int dx) {
-    bool visited[config::CHUNK_SIZE][config::CHUNK_SIZE];
-
-    std::memset(visited, false, sizeof(visited));
-
-    for (int dy = 0; dy < config::CHUNK_SIZE; ++dy) {
-        for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
-            if (visited[dy][dz]) {
-                continue;
-            }
-
-            int id = this->get_block_id(dx, dy, dz);
-
-            if (!this->_blocks[id].is_face_active(FaceType::RIGHT)) {
-                continue;
-            }
-
-            BlockType &block_type = this->_blocks[id].get_type();
-
-            if (block_type == BlockType::EMPTY) {
-                continue;
-            }
-
-            int depth = 1;
-
-            while (dz + depth < config::CHUNK_SIZE) {
-                int block_id = this->get_block_id(dx, dy, dz + depth);
-
-                Block &block = this->_blocks[block_id];
-
-                if (block.get_type() != block_type || !block.is_face_active(FaceType::RIGHT)) {
-                    break;
-                }
-
-                ++depth;
-            }
-
-            int height = 1;
-
-            while (dy + height < config::CHUNK_SIZE) {
-                bool valid = true;
-
-                for (int dd = 0; dd < depth; ++dd) {
-                    int block_id = this->get_block_id(dx, dy + height, dz + dd);
-
-                    Block &block = this->_blocks[block_id];
-
-                    if (block.get_type() != block_type || !block.is_face_active(FaceType::RIGHT)) {
-                        valid = false;
-                        break;
-                    }
-                }
-
-                if (!valid) {
-                    break;
-                }
-
-                ++height;
-            }
-
-            for (int ly = 0; ly < height; ++ly) {
-                for (int lz = 0; lz < depth; ++lz) {
-                    visited[dy + ly][dz + lz] = true;
-                }
-            }
-
-            int x = this->global_x + dx;
-            int y = this->global_y + dy;
-            int z = this->global_z + dz;
-
-            int texture_id = static_cast<int>(block_type);
-
-            this->_mesh.add_vertex(x + 1.0f, y, z + depth, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-            this->_mesh.add_vertex(x + 1.0f, y, z, 1.0f, 0.0f, 0.0f, depth, 0.0f);
-            this->_mesh.add_vertex(x + 1.0f, y + height, z, 1.0f, 0.0f, 0.0f, depth, height);
-            this->_mesh.add_vertex(x + 1.0f, y + height, z + depth, 1.0f, 0.0f, 0.0f, 0.0f, height);
-
-            this->_mesh.add_index(0 + index_offset);
-            this->_mesh.add_index(1 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(3 + index_offset);
-            this->_mesh.add_index(0 + index_offset);
-
-            index_offset += 4;
-        }
-    }
-}
-
-// void Chunk::merge_top_faces(int &index_offset, int dy) {
-//     bool visited[config::CHUNK_SIZE][config::CHUNK_SIZE];
-//
-//     std::memset(visited, false, sizeof(visited));
-//
-//     for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
-//         for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
-//             if (visited[dz][dx]) {
-//                 continue;
-//             }
-//
-//             int id = this->get_block_id(dx, dy, dz);
-//
-//             if (!this->_blocks[id].is_face_active(FaceType::TOP)) {
-//                 continue;
-//             }
-//
-//             BlockType &block_type = this->_blocks[id].get_type();
-//
-//             if (block_type == BlockType::EMPTY) {
-//                 continue;
-//             }
-//
-//             int width = 1;
-//
-//             while (dx + width < config::CHUNK_SIZE) {
-//                 int block_id = this->get_block_id(dx + width, dy, dz);
-//
-//                 Block &block = this->_blocks[block_id];
-//
-//                 if (block.get_type() != block_type || !block.is_face_active(FaceType::TOP)) {
-//                     break;
-//                 }
-//
-//                 ++width;
-//             }
-//
-//             int depth = 1;
-//
-//             while (dz + depth < config::CHUNK_SIZE) {
-//                 bool valid = true;
-//
-//                 for (int dw = 0; dw < width; ++dw) {
-//                     int block_id = this->get_block_id(dx + dw, dy, dz + depth);
-//
-//                     Block &block = this->_blocks[block_id];
-//
-//                     if (block.get_type() != block_type || !block.is_face_active(FaceType::TOP)) {
-//                         valid = false;
-//                         break;
-//                     }
-//                 }
-//
-//                 if (!valid) {
-//                     break;
-//                 }
-//
-//                 ++depth;
-//             }
-//
-//             for (int lz = 0; lz < depth; ++lz) {
-//                 for (int lx = 0; lx < width; ++lx) {
-//                     visited[dz + lz][dx + lx] = true;
-//                 }
-//             }
-//
-//             int x = this->global_x + dx;
-//             int y = this->global_y + dy;
-//             int z = this->global_z + dz;
-//
-//             this->_mesh.add_vertex(x, y + 1.0f, z + depth, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
-//             this->_mesh.add_vertex(x + width, y + 1.0f, z + depth, 0.0f, 1.0f, 0.0f, width, 0.0f);
-//             this->_mesh.add_vertex(x + width, y + 1.0f, z, 0.0f, 1.0f, 0.0f, width, depth);
-//             this->_mesh.add_vertex(x, y + 1.0f, z, 0.0f, 1.0f, 0.0f, 0.0f, depth);
-//
-//             this->_mesh.add_index(0 + index_offset);
-//             this->_mesh.add_index(1 + index_offset);
-//             this->_mesh.add_index(2 + index_offset);
-//             this->_mesh.add_index(2 + index_offset);
-//             this->_mesh.add_index(3 + index_offset);
-//             this->_mesh.add_index(0 + index_offset);
-//
-//             index_offset += 4;
-//         }
-//     }
-// }
-
-void Chunk::merge_top_faces(int &index_offset, int dy) {
-    std::uint32_t masks[config::CHUNK_SIZE];
-
+void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
-        masks[z] = 0U;
+        std::uint32_t masks[config::CHUNK_SIZE];
 
-        for (int x = 0; x < config::CHUNK_SIZE; ++x) {
-            int id = this->get_block_id(x, dy, z);
+        for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+            masks[y] = 0U;
 
-            if (this->_blocks[id].get_type() == BlockType::EMPTY) {
-                continue;
+            for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+                int id = this->get_block_id(x, y, z);
+
+                if (this->_blocks[id].get_type() == block_type) {
+                    masks[y] |= (1U << x);
+                }
             }
-
-            masks[z] |= (1U << x);
         }
-    }
 
-    for (int z = 0; z < config::CHUNK_SIZE; ++z) {
-        while (masks[z]) {
-            // Get position of first block
-            int x = std::countr_zero(masks[z]);
+        for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+            while (masks[y]) {
+                int x = std::countr_zero(masks[y]);
 
-            // Get the number of consecutive ones
-            int width = std::countr_one(masks[z] >> x);
+                int width = std::countr_one(masks[y] >> x);
 
-            LOG_DEBUG("Mask width: {}", width);
+                std::uint32_t occupancy_mask = (width < 32) ? (((1U << width) - 1) << x) : this->_FULL_MASK;
 
-            std::uint32_t max = 0xFFFFFFFF;
+                int height = 0;
 
-            // Create a occupancy mask for the consecutive blocks
-            std::uint32_t mask = (width < 32) ? (((1U << width) - 1) << x) : max;
+                while (y + height < config::CHUNK_SIZE) {
+                    if ((masks[y + height] & occupancy_mask) != occupancy_mask) {
+                        break;
+                    }
 
-            // Find the maximum depth
-            int depth = 0;
+                    masks[y + height] &= ~occupancy_mask;
 
-            while (z + depth < config::CHUNK_SIZE) {
-                if ((masks[z + depth] & mask) != mask) {
-                    break;
+                    ++height;
                 }
 
-                masks[z + depth] &= ~mask;
+                int block_x = this->global_x + x;
+                int block_y = this->global_y + y;
+                int block_z = this->global_z + z;
 
-                ++depth;
+                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, width, height, 0);
             }
-
-            int wx = this->global_x + x;
-            int wy = this->global_y + dy;
-            int wz = this->global_z + z;
-
-            this->_mesh.add_vertex(wx, wy + 1.0f, wz + depth, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
-            this->_mesh.add_vertex(wx + width, wy + 1.0f, wz + depth, 0.0f, 1.0f, 0.0f, width, 0.0f);
-            this->_mesh.add_vertex(wx + width, wy + 1.0f, wz, 0.0f, 1.0f, 0.0f, width, depth);
-            this->_mesh.add_vertex(wx, wy + 1.0f, wz, 0.0f, 1.0f, 0.0f, 0.0f, depth);
-
-            this->_mesh.add_index(0 + index_offset);
-            this->_mesh.add_index(1 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(3 + index_offset);
-            this->_mesh.add_index(0 + index_offset);
-
-            index_offset += 4;
         }
     }
 }
 
-void Chunk::merge_bottom_faces(int &index_offset, int dy) {
-    bool visited[config::CHUNK_SIZE][config::CHUNK_SIZE];
+void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type) {
+    for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+        std::uint32_t masks[config::CHUNK_SIZE];
 
-    std::memset(visited, false, sizeof(visited));
+        for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+            masks[z] = 0U;
 
-    for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
-        for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
-            if (visited[dz][dx]) {
-                continue;
-            }
+            for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+                int id = this->get_block_id(x, y, z);
 
-            int id = this->get_block_id(dx, dy, dz);
-
-            if (!this->_blocks[id].is_face_active(FaceType::BOTTOM)) {
-                continue;
-            }
-
-            BlockType &block_type = this->_blocks[id].get_type();
-
-            if (block_type == BlockType::EMPTY) {
-                continue;
-            }
-
-            int width = 1;
-
-            while (dx + width < config::CHUNK_SIZE) {
-                int block_id = this->get_block_id(dx + width, dy, dz);
-
-                Block &block = this->_blocks[block_id];
-
-                if (block.get_type() != block_type || !block.is_face_active(FaceType::BOTTOM)) {
-                    break;
+                if (this->_blocks[id].get_type() == block_type) {
+                    masks[z] |= (1U << x);
                 }
-
-                ++width;
             }
+        }
 
-            int depth = 1;
+        for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+            while (masks[z]) {
+                int x = std::countr_zero(masks[z]);
 
-            while (dz + depth < config::CHUNK_SIZE) {
-                bool valid = true;
+                int width = std::countr_one(masks[z] >> x);
 
-                for (int dw = 0; dw < width; ++dw) {
-                    int block_id = this->get_block_id(dx + dw, dy, dz + depth);
+                std::uint32_t occupancy_mask = (width < 32) ? (((1U << width) - 1) << x) : this->_FULL_MASK;
 
-                    Block &block = this->_blocks[block_id];
+                int depth = 0;
 
-                    if (block.get_type() != block_type || !block.is_face_active(FaceType::BOTTOM)) {
-                        valid = false;
+                while (z + depth < config::CHUNK_SIZE) {
+                    if ((masks[z + depth] & occupancy_mask) != occupancy_mask) {
                         break;
                     }
+
+                    masks[z + depth] &= ~occupancy_mask;
+
+                    ++depth;
                 }
 
-                if (!valid) {
-                    break;
-                }
+                int block_x = this->global_x + x;
+                int block_y = this->global_y + y;
+                int block_z = this->global_z + z;
 
-                ++depth;
+                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, width, 0, depth);
             }
-
-            for (int lz = 0; lz < depth; ++lz) {
-                for (int lx = 0; lx < width; ++lx) {
-                    visited[dz + lz][dx + lx] = true;
-                }
-            }
-
-            int x = this->global_x + dx;
-            int y = this->global_y + dy;
-            int z = this->global_z + dz;
-
-            int texture_id = static_cast<int>(block_type);
-
-            this->_mesh.add_vertex(x + width, y, z + depth, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f);
-            this->_mesh.add_vertex(x, y, z + depth, 0.0f, -1.0f, 0.0f, width, 0.0f);
-            this->_mesh.add_vertex(x, y, z, 0.0f, -1.0f, 0.0f, width, depth);
-            this->_mesh.add_vertex(x + width, y, z, 0.0f, -1.0f, 0.0f, 0.0f, depth);
-
-            this->_mesh.add_index(0 + index_offset);
-            this->_mesh.add_index(1 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(3 + index_offset);
-            this->_mesh.add_index(0 + index_offset);
-
-            index_offset += 4;
         }
     }
 }
 
-void Chunk::merge_front_faces(int &index_offset, int dz) {
-    bool visited[config::CHUNK_SIZE][config::CHUNK_SIZE];
+void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
+    for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+        std::uint32_t masks[config::CHUNK_SIZE];
 
-    std::memset(visited, false, sizeof(visited));
+        for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+            masks[z] = 0U;
 
-    for (int dy = 0; dy < config::CHUNK_SIZE; ++dy) {
-        for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
-            if (visited[dy][dx]) {
-                continue;
-            }
+            for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+                int id = this->get_block_id(x, y, z);
 
-            int id = this->get_block_id(dx, dy, dz);
-
-            if (!this->_blocks[id].is_face_active(FaceType::FRONT)) {
-                continue;
-            }
-
-            BlockType &block_type = this->_blocks[id].get_type();
-
-            if (block_type == BlockType::EMPTY) {
-                continue;
-            }
-
-            int width = 1;
-
-            while (dx + width < config::CHUNK_SIZE) {
-                int block_id = this->get_block_id(dx + width, dy, dz);
-
-                Block &block = this->_blocks[block_id];
-
-                if (block.get_type() != block_type || !block.is_face_active(FaceType::FRONT)) {
-                    break;
-                }
-
-                ++width;
-            }
-
-            int height = 1;
-
-            while (dy + height < config::CHUNK_SIZE) {
-                bool valid = true;
-
-                for (int dh = 0; dh < height; ++dh) {
-                    int block_id = this->get_block_id(dx + width, dy + dh, dz);
-
-                    Block &block = this->_blocks[block_id];
-
-                    if (block.get_type() != block_type || !block.is_face_active(FaceType::FRONT)) {
-                        valid = false;
-                        break;
-                    }
-                }
-
-                if (!valid) {
-                    break;
-                }
-
-                ++height;
-            }
-
-            for (int ly = 0; ly < height; ++ly) {
-                for (int lx = 0; lx < width; ++lx) {
-                    visited[dy + ly][dx + lx] = true;
+                if (this->_blocks[id].get_type() == block_type) {
+                    masks[z] |= (1U << y);
                 }
             }
-
-            int x = this->global_x + dx;
-            int y = this->global_y + dy;
-            int z = this->global_z + dz;
-
-            int texture_id = static_cast<int>(block_type);
-
-            // NOTE: dx is row, dz is col, meaning u = depth, v = width
-            this->_mesh.add_vertex(x, y, z + 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-            this->_mesh.add_vertex(x + width, y, z + 1.0f, 0.0f, 0.0f, 1.0f, width, 0.0f);
-            this->_mesh.add_vertex(x + width, y + height, z + 1.0f, 0.0f, 0.0f, 1.0f, width, height);
-            this->_mesh.add_vertex(x, y + height, z + 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, height);
-
-            this->_mesh.add_index(0 + index_offset);
-            this->_mesh.add_index(1 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(3 + index_offset);
-            this->_mesh.add_index(0 + index_offset);
-
-            index_offset += 4;
         }
-    }
-}
 
-void Chunk::merge_back_faces(int &index_offset, int dz) {
-    bool visited[config::CHUNK_SIZE][config::CHUNK_SIZE];
+        for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+            while (masks[z]) {
+                int y = std::countr_zero(masks[z]);
 
-    std::memset(visited, false, sizeof(visited));
+                int height = std::countr_one(masks[z] >> y);
 
-    for (int dy = 0; dy < config::CHUNK_SIZE; ++dy) {
-        for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
-            if (visited[dy][dx]) {
-                continue;
-            }
+                std::uint32_t occupancy_mask = (height < 32) ? (((1U << height) - 1) << y) : this->_FULL_MASK;
 
-            int id = this->get_block_id(dx, dy, dz);
+                int depth = 0;
 
-            if (!this->_blocks[id].is_face_active(FaceType::BACK)) {
-                continue;
-            }
-
-            BlockType &block_type = this->_blocks[id].get_type();
-
-            if (block_type == BlockType::EMPTY) {
-                continue;
-            }
-
-            int width = 1;
-
-            while (dx + width < config::CHUNK_SIZE) {
-                int block_id = this->get_block_id(dx + width, dy, dz);
-
-                Block &block = this->_blocks[block_id];
-
-                if (block.get_type() != block_type || !block.is_face_active(FaceType::BACK)) {
-                    break;
-                }
-
-                ++width;
-            }
-
-            int height = 1;
-
-            while (dy + height < config::CHUNK_SIZE) {
-                bool valid = true;
-
-                for (int dh = 0; dh < height; ++dh) {
-                    int block_id = this->get_block_id(dx + width, dy + dh, dz);
-
-                    Block &block = this->_blocks[block_id];
-
-                    if (block.get_type() != block_type || !block.is_face_active(FaceType::BACK)) {
-                        valid = false;
+                while (z + depth < config::CHUNK_SIZE) {
+                    if ((masks[z + depth] & occupancy_mask) != occupancy_mask) {
                         break;
                     }
+
+                    masks[z + depth] &= ~occupancy_mask;
+
+                    ++depth;
                 }
 
-                if (!valid) {
-                    break;
-                }
+                int block_x = this->global_x + x;
+                int block_y = this->global_y + y;
+                int block_z = this->global_z + z;
 
-                ++height;
+                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, 0, height, depth);
             }
-
-            for (int ly = 0; ly < height; ++ly) {
-                for (int lx = 0; lx < width; ++lx) {
-                    visited[dy + ly][dx + lx] = true;
-                }
-            }
-
-            int x = this->global_x + dx;
-            int y = this->global_y + dy;
-            int z = this->global_z + dz;
-
-            int texture_id = static_cast<int>(block_type);
-
-            // NOTE: dx is row, dz is col, meaning u = depth, v = width
-            this->_mesh.add_vertex(x + width, y, z, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f);
-            this->_mesh.add_vertex(x, y, z, 0.0f, 0.0f, -1.0f, width, 0.0f);
-            this->_mesh.add_vertex(x, y + height, z, 0.0f, 0.0f, -1.0f, width, height);
-            this->_mesh.add_vertex(x + width, y + height, z, 0.0f, 0.0f, -1.0f, 0.0f, height);
-
-            this->_mesh.add_index(0 + index_offset);
-            this->_mesh.add_index(1 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(2 + index_offset);
-            this->_mesh.add_index(3 + index_offset);
-            this->_mesh.add_index(0 + index_offset);
-
-            index_offset += 4;
         }
     }
 }
 
 void Chunk::cull_block_faces() {
+}
+
+void Chunk::clear_mesh() {
+    this->_mesh.clear_vertices();
+
+    this->_faces.clear();
 }
 
 void Chunk::render(Shader &shader) {

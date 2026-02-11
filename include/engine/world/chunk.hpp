@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/world/face.hpp"
 #include "engine/world/block.hpp"
 #include "engine/world/config.hpp"
 #include "engine/world/generator.hpp"
@@ -37,6 +38,8 @@ class Chunk {
   private:
     static inline constexpr engine::model::Topology _TOPOLOGY = engine::model::Topology::TRIANGLE;
 
+    static inline constexpr std::uint32_t _FULL_MASK = 0xFFFFFFFF;
+
     int _height_map[engine::world::config::CHUNK_SIZE2];
 
     engine::world::Block _blocks[engine::world::config::CHUNK_SIZE3];
@@ -45,20 +48,19 @@ class Chunk {
 
     engine::model::Mesh _mesh;
 
+    std::vector<engine::world::Face> _faces;
+
     int get_block_id(int x, int y, int z);
 
-    void merge_X_faces(int &index_offset);
-    void merge_Y_faces(int &index_offset);
-    void merge_Z_faces(int &index_offset);
+    void merge_faces(BlockType &block_type, FaceType &face_type);
 
-    void merge_left_faces(int &index_offset, int dx);
-    void merge_right_faces(int &index_offset, int dx);
+    void merge_XY_faces(BlockType &block_type, FaceType &face_type);
+    void merge_XZ_faces(BlockType &block_type, FaceType &face_type);
+    void merge_YZ_faces(BlockType &block_type, FaceType &face_type);
 
-    void merge_top_faces(int &index_offset, int dy);
-    void merge_bottom_faces(int &index_offset, int dy);
+    void add_face(BlockType &block_type, FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
 
-    void merge_front_faces(int &index_offset, int dz);
-    void merge_back_faces(int &index_offset, int dz);
+    void clear_mesh();
 };
 
 } // namespace engine::world
