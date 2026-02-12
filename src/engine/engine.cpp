@@ -36,46 +36,8 @@ void Engine::initialise() {
 
     camera_manager.set_camera("player");
 
-    this->_time = 0.0f;
-
-    int size = 32;
-    int seed = (1 << 4) | (1 << 8) | (1 << 16);
-
-    auto simplex = FastNoise::New<FastNoise::Simplex>();
-
-    simplex->SetOutputMin(0.0f);
-    simplex->SetOutputMax(64.0f);
-
-    auto fractal = FastNoise::New<FastNoise::FractalFBm>();
-
-    fractal->SetSource(simplex);
-    fractal->SetOctaveCount(4);
-
-    auto simplex3 = FastNoise::New<FastNoise::Simplex>();
-    auto fractal3 = FastNoise::New<FastNoise::FractalFBm>();
-
-    fractal3->SetSource(simplex3);
-    fractal3->SetOctaveCount(4);
-
-    // for (int x = 0; x < size; ++x) {
-    //     for (int z = 0; z < size; ++z) {
-    //         int height = fractal->GenSingle2D(x, z, seed);
-    //         this->_cubes.emplace_back(x, height, z);
-    //
-    //         // for (int y = height - 1; y >= 0; --y) {
-    //         //     float threshold = fractal3->GenSingle3D(x, y, z, seed);
-    //         //     if (threshold > 0.2f && threshold < 0.8f) {
-    //         //         this->_cubes.emplace_back(x, y, z);
-    //         //     }
-    //         // }
-    //     }
-    // }
-    //
-    // for (Cube &cube : this->_cubes) {
-    //     cube.get_mesh().upload();
-    // }
-
     chunk_manager.generate_chunk(glm::vec3(0.0f));
+    chunk_manager.generate_chunk(glm::vec3(-32.0f, 0.0f, 0.0f));
 }
 
 void Engine::update(GLFWwindow *window, float delta_time) {
@@ -94,8 +56,6 @@ void Engine::update(GLFWwindow *window, float delta_time) {
     // }
 
     camera->update(window, delta_time);
-
-    this->_time += delta_time;
 }
 
 void Engine::render() {
@@ -105,7 +65,7 @@ void Engine::render() {
 
     Camera *current_camera = camera_manager.get_camera();
 
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     ShaderManager &shader_manager = ShaderManager::get_instance();
 

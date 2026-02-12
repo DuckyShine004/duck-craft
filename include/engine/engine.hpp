@@ -1,10 +1,6 @@
 #pragma once
 
-#include "engine/camera/camera.hpp"
-
-#include "engine/entity/quad.hpp"
-#include "engine/entity/cube.hpp"
-#include "engine/entity/sphere.hpp"
+#include <GLFW/glfw3.h>
 
 namespace engine {
 
@@ -17,10 +13,6 @@ class Engine {
     void render();
 
   private:
-    std::vector<engine::entity::Quad> _quads;
-    std::vector<engine::entity::Cube> _cubes;
-    std::vector<engine::entity::Sphere> _spheres;
-
     float _time;
 };
 

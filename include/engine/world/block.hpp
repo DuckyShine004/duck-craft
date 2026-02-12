@@ -13,6 +13,7 @@ class Block {
 
     void set_type(const engine::world::BlockType &type);
 
+    void set_face_state(int face_type_index, bool state);
     void set_face_state(const engine::world::FaceType &type, bool state);
 
     engine::world::BlockType &get_type();

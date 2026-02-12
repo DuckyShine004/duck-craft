@@ -9,6 +9,19 @@ namespace engine::world {
 
 class Face {
   public:
+    // clang-format off
+    static inline constexpr int I_NORMALS[6][3] = {
+        {0, 1, 0},
+        {0, -1, 0},
+        {1, 0, 0},
+        {-1, 0, 0},
+        {0, 0, 1},
+        {0, 0, -1},
+    };
+    //clang-format on
+    
+    static inline constexpr int NUMBER_OF_FACES = 6;
+
     int x;
     int y;
     int z;

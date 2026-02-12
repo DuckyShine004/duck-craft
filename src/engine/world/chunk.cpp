@@ -1,5 +1,7 @@
-#include <bit>
-#include <cstring>
+#define GLM_ENABLE_EXPERIMENTAL
+
+#include <glm/glm.hpp>
+#include <glm/gtx/hash.hpp>
 
 #include "engine/world/chunk.hpp"
 
@@ -13,28 +15,27 @@ using namespace engine::shader;
 
 namespace engine::world {
 
+// TODO: Create debug struct for chunk mesh
 Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), global_y(global_y), global_z(global_z) {
     this->local_x = global_x >> config::CHUNK_SIZE_BITS;
     this->local_y = global_y >> config::CHUNK_SIZE_BITS;
     this->local_z = global_z >> config::CHUNK_SIZE_BITS;
 }
 
-void Chunk::generate(Generator &generator, HeightMap &height_map) {
+void Chunk::generate(Generator &generator, std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks, HeightMap &height_map) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
-                int id = this->get_block_id(x, y, z);
+                Block &block = this->get_block(x, y, z);
 
-                this->_blocks[id].set_type(BlockType::GRASS);
+                block.set_type(BlockType::GRASS);
+
+                this->cull_faces(chunks, block, x, y, z);
             }
         }
     }
-
-    this->cull_block_faces();
 }
 
-// TODO: Greedy meshing
-// PERF: Binary meshing
 void Chunk::generate_mesh() {
     this->clear_mesh();
 
@@ -52,8 +53,6 @@ void Chunk::generate_mesh() {
 
     int index_offset = 0;
 
-    int total_faces = 0;
-
     for (Face &face : this->_faces) {
         face.add_to_mesh(this->_mesh);
 
@@ -64,10 +63,10 @@ void Chunk::generate_mesh() {
         this->_mesh.add_index(3 + index_offset);
         this->_mesh.add_index(0 + index_offset);
 
-        ++total_faces;
-
         index_offset += 4;
     }
+
+    int total_faces = this->_faces.size();
 
     LOG_DEBUG("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
 
@@ -92,9 +91,9 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type) {
             masks[y] = 0U;
 
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
-                int id = this->get_block_id(x, y, z);
+                Block &block = this->get_block(x, y, z);
 
-                if (this->_blocks[id].get_type() == block_type) {
+                if (block.get_type() == block_type && block.is_face_active(face_type)) {
                     masks[y] |= (1U << x);
                 }
             }
@@ -138,9 +137,9 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type) {
             masks[z] = 0U;
 
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
-                int id = this->get_block_id(x, y, z);
+                Block &block = this->get_block(x, y, z);
 
-                if (this->_blocks[id].get_type() == block_type) {
+                if (block.get_type() == block_type && block.is_face_active(face_type)) {
                     masks[z] |= (1U << x);
                 }
             }
@@ -184,9 +183,9 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
             masks[z] = 0U;
 
             for (int y = 0; y < config::CHUNK_SIZE; ++y) {
-                int id = this->get_block_id(x, y, z);
+                Block &block = this->get_block(x, y, z);
 
-                if (this->_blocks[id].get_type() == block_type) {
+                if (block.get_type() == block_type && block.is_face_active(face_type)) {
                     masks[z] |= (1U << y);
                 }
             }
@@ -222,7 +221,51 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
     }
 }
 
-void Chunk::cull_block_faces() {
+void Chunk::cull_faces(std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks, Block &block, int x, int y, int z) {
+    for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
+        int nx = Face::I_NORMALS[face_type_index][0];
+        int ny = Face::I_NORMALS[face_type_index][1];
+        int nz = Face::I_NORMALS[face_type_index][2];
+
+        int dx = x + nx;
+        int dy = y + ny;
+        int dz = z + nz;
+
+        int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
+
+        if (dx < 0 || dx >= config::CHUNK_SIZE || dy < 0 || dy >= config::CHUNK_SIZE || dz < 0 || dz >= config::CHUNK_SIZE) {
+            glm::ivec3 chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
+
+            auto chunk_iterator = chunks.find(chunk_id);
+
+            if (chunk_iterator != chunks.end()) {
+                int bx = dx & (config::CHUNK_SIZE - 1);
+                int by = dy & (config::CHUNK_SIZE - 1);
+                int bz = dz & (config::CHUNK_SIZE - 1);
+
+                Chunk &chunk = *chunk_iterator->second.get();
+
+                Block &adjacent_block = chunk.get_block(bx, by, bz);
+
+                this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
+                this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
+            }
+        } else {
+            Block &adjacent_block = this->get_block(dx, dy, dz);
+
+            this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
+            this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
+        }
+    }
+}
+
+// NOTE: Need to add to logic once transparency is added
+void Chunk::cull_face_based_on_adjacent_block(Block &block_a, Block &block_b, int face_type_index) {
+    if (block_b.get_type() != BlockType::EMPTY) {
+        block_a.set_face_state(face_type_index, false);
+    } else {
+        block_a.set_face_state(face_type_index, true);
+    }
 }
 
 void Chunk::clear_mesh() {
@@ -243,6 +286,12 @@ void Chunk::render(Shader &shader) {
 
 int Chunk::get_block_id(int x, int y, int z) {
     return x + (y << config::CHUNK_SIZE_BITS) + (z << config::CHUNK_SIZE_BITS2);
+}
+
+Block &Chunk::get_block(int x, int y, int z) {
+    int id = this->get_block_id(x, y, z);
+
+    return this->_blocks[id];
 }
 
 } // namespace engine::world

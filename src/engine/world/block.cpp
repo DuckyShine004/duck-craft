@@ -25,4 +25,12 @@ void Block::set_face_state(const FaceType &type, bool state) {
     }
 }
 
+void Block::set_face_state(int face_type_index, bool state) {
+    if (state) {
+        this->_face_mask |= (1U << face_type_index);
+    } else {
+        this->_face_mask &= ~(1U << face_type_index);
+    }
+}
+
 } // namespace engine::world

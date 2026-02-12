@@ -22,17 +22,21 @@ void ChunkManager::initialise() {
     this->_generator = std::make_shared<Generator>();
 }
 
-// TODO: Thread
+// TODO: Thread entire chunk generation, including heightmap and chunk map
 void ChunkManager::generate_chunk(const glm::vec3 &position) {
     int global_x = static_cast<int>(position.x);
     int global_y = static_cast<int>(position.y);
     int global_z = static_cast<int>(position.z);
 
-    int local_x = global_x >> config::CHUNK_SIZE_BITS;
-    int local_y = global_y >> config::CHUNK_SIZE_BITS;
-    int local_z = global_z >> config::CHUNK_SIZE_BITS;
+    int local_x = (global_x >= 0) ? global_x >> config::CHUNK_SIZE_BITS : -(-global_x >> config::CHUNK_SIZE_BITS);
+    int local_y = (global_y >= 0) ? global_y >> config::CHUNK_SIZE_BITS : -(-global_y >> config::CHUNK_SIZE_BITS);
+    int local_z = (global_z >= 0) ? global_y >> config::CHUNK_SIZE_BITS : -(-global_z >> config::CHUNK_SIZE_BITS);
 
-    int height_map_id = this->get_height_map_local_id(local_x, local_z);
+    global_x = (local_x >= 0) ? local_x << config::CHUNK_SIZE_BITS : -(-local_x << config::CHUNK_SIZE_BITS);
+    global_y = (local_y >= 0) ? local_y << config::CHUNK_SIZE_BITS : -(-local_y << config::CHUNK_SIZE_BITS);
+    global_z = (local_z >= 0) ? local_z << config::CHUNK_SIZE_BITS : -(-local_z << config::CHUNK_SIZE_BITS);
+
+    glm::ivec2 height_map_id(local_x, local_z);
 
     auto height_map_iterator = this->_height_maps.find(height_map_id);
 
@@ -46,91 +50,29 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
         height_map_iterator = iterator;
     }
 
-    int chunk_id = this->get_chunk_local_id(local_x, local_y, local_z);
+    glm::ivec3 chunk_id(local_x, local_y, local_z);
 
     auto chunk_iterator = this->_chunks.find(chunk_id);
 
     if (chunk_iterator == this->_chunks.end()) {
         std::unique_ptr<Chunk> chunk = std::make_unique<Chunk>(global_x, global_y, global_z);
 
-        chunk->generate(*this->_generator, *height_map_iterator->second);
+        // TODO: Child thread chunk generation
+        chunk->generate(*this->_generator, this->_chunks, *height_map_iterator->second);
 
+        // TODO: Child thread mesh generation
         chunk->generate_mesh();
 
         auto [iterator, is_emplaced] = this->_chunks.emplace(chunk_id, std::move(chunk));
+
+        // TODO: Child thread- cull neighbour meshes and regenerate mesh if needed
     }
 }
 
-// void ChunkManager::generate_chunk_local(int x, int y, int z) {
-//     int height_map_id =
-//
-//     int chunk_id = this->get_chunk_local_id(x,y,z);
-//
-//     auto iterator = this->_chunks.find(chunk_id);
-//
-//     if(iterator == this->_chunks.end()) {
-//         std::unique_ptr<Chunk> chunk = std::make_unique<Chunk>();
-//     }
-// }
-
 void ChunkManager::render(Shader &shader) {
-    this->_chunks[0]->render(shader);
+    for (auto &chunk_iterator : this->_chunks) {
+        chunk_iterator.second.get()->render(shader);
+    }
 }
-
-// Chunk &ChunkManager::get_chunk(glm::vec3 &position) {
-//     int global_x = static_cast<int>(position.x);
-//     int global_y = static_cast<int>(position.y);
-//     int global_z = static_cast<int>(position.z);
-//
-//     int local_x = global_x >> config::CHUNK_SIZE_BITS;
-//     int local_y = global_y >> config::CHUNK_SIZE_BITS;
-//     int local_z = global_z >> config::CHUNK_SIZE_BITS;
-//
-//     int id = local_x + (local_y << config::CHUNK_SIZE_BITS) + (local_z << config::CHUNK_SIZE_BITS2);
-//
-//     return *this->_chunks[id];
-// }
-
-Chunk &ChunkManager::get_chunk_local(int local_chunk_x, int local_chunk_y, int local_chunk_z) {
-    int id = local_chunk_x + (local_chunk_y << config::CHUNK_SIZE_BITS) + (local_chunk_z << config::CHUNK_SIZE_BITS2);
-
-    return *this->_chunks[id];
-}
-
-int ChunkManager::get_chunk_local_id(int local_chunk_x, int local_chunk_y, int local_chunk_z) {
-    return local_chunk_x + (local_chunk_y << config::CHUNK_SIZE_BITS) + (local_chunk_z << config::CHUNK_SIZE_BITS2);
-}
-
-HeightMap &ChunkManager::get_height_map_local(int local_chunk_x, int local_chunk_z) {
-    int id = local_chunk_x + (local_chunk_z << config::CHUNK_SIZE_BITS);
-
-    return *this->_height_maps[id];
-}
-
-int ChunkManager::get_height_map_local_id(int local_chunk_x, int local_chunk_z) {
-    return local_chunk_x + (local_chunk_z << config::CHUNK_SIZE_BITS);
-}
-
-// Chunk *ChunkManager::get_block(int x, int y, int z) {
-//     if (x < 0 || y < 0 || z < 0) {
-//         return nullptr;
-//     }
-//
-//     int local_x = x >> Chunk::SIZE_BITS;
-//     int local_y = y >> Chunk::SIZE_BITS;
-//     int local_z = z >> Chunk::SIZE_BITS;
-//
-//     int id = local_x + (local_y << Chunk::SIZE_BITS) + (local_z << Chunk::SIZE_BITS2);
-//
-//     if (id >= 128) {
-//         return nullptr;
-//     }
-//
-//     Chunk *chunk = this->_chunks[id];
-//
-//     if (chunk == nullptr) {
-//         return nullptr;
-//     }
-// }
 
 } // namespace manager
