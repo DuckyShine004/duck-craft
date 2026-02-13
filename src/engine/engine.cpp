@@ -31,17 +31,31 @@ void Engine::initialise() {
 
     CameraManager &camera_manager = CameraManager::get_instance();
 
+    chunk_manager.set_thread_pool(this->_thread_pool);
+
     camera_manager.add_camera("player");
     camera_manager.add_camera("debug");
 
     camera_manager.set_camera("player");
 
-    chunk_manager.generate_chunk(glm::vec3(0.0f));
-    chunk_manager.generate_chunk(glm::vec3(-32.0f, 0.0f, 0.0f));
+    const int TEST_CHUNK_SIZE = 3;
+
+    for (int x = -2; x < TEST_CHUNK_SIZE; ++x) {
+        for (int y = -2; y < TEST_CHUNK_SIZE; ++y) {
+            for (int z = -2; z < TEST_CHUNK_SIZE; ++z) {
+                int dx = x << 5;
+                int dy = y << 5;
+                int dz = z << 5;
+
+                chunk_manager.generate_chunk(glm::vec3(dx, dy, dz));
+            }
+        }
+    }
 }
 
 void Engine::update(GLFWwindow *window, float delta_time) {
     CameraManager &camera_manager = CameraManager::get_instance();
+    ChunkManager &chunk_manager = ChunkManager::get_instance();
 
     Camera *camera = camera_manager.get_camera();
 
@@ -56,6 +70,8 @@ void Engine::update(GLFWwindow *window, float delta_time) {
     // }
 
     camera->update(window, delta_time);
+
+    chunk_manager.process_chunks();
 }
 
 void Engine::render() {
@@ -85,10 +101,6 @@ void Engine::render() {
     glBindTexture(GL_TEXTURE_2D_ARRAY, texture_manager.get_texture_handle("blocks"));
 
     current_camera->upload_model_view_projection(scene);
-
-    // for (Cube &cube : this->_cubes) {
-    //     cube.render(scene);
-    // }
 
     chunk_manager.render(scene);
 

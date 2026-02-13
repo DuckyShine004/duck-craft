@@ -12,6 +12,8 @@
 #include "engine/world/generator.hpp"
 #include "engine/world/height_map.hpp"
 
+#include "engine/threading/thread_pool.hpp"
+
 #include "engine/shader/shader.hpp"
 
 #include "manager/manager.hpp"
@@ -28,7 +30,11 @@ class ChunkManager final : public Manager {
 
     void generate_height_map(int local_chunk_x, int local_chunk_z);
 
+    void process_chunks();
+
     void render(engine::shader::Shader &shader);
+
+    void set_thread_pool(engine::threading::ThreadPool &thread_pool);
 
   private:
     std::shared_ptr<engine::world::Generator> _generator;
@@ -37,6 +43,8 @@ class ChunkManager final : public Manager {
     std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> _chunks;
 
     std::unordered_map<glm::ivec2, std::unique_ptr<engine::world::HeightMap>> _height_maps;
+
+    engine::threading::ThreadPool *_thread_pool;
 
     ChunkManager();
 

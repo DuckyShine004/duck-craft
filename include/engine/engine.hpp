@@ -2,6 +2,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include "engine/threading/thread_pool.hpp"
+
 namespace engine {
 
 class Engine {
@@ -14,6 +16,8 @@ class Engine {
 
   private:
     float _time;
+
+    engine::threading::ThreadPool _thread_pool;
 };
 
 } // namespace engine

@@ -8,7 +8,6 @@ Plane::Plane(glm::vec3 &p1, glm::vec3 &p2, glm::vec3 &p3) {
     this->compute(p1, p2, p3);
 }
 
-// NOTE: Signed distance not the absolute distance
 float Plane::distance(glm::vec3 &point) {
     return glm::dot(this->normal, point) + this->_d;
 }

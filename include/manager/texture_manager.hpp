@@ -9,7 +9,6 @@
 
 namespace manager {
 
-// NOTE: Textures supported are voxel textures, and billboards
 class TextureManager final : public Manager {
   public:
     static TextureManager &get_instance();

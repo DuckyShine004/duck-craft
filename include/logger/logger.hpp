@@ -30,6 +30,8 @@ class Logger {
 
     void run();
 
+    std::mutex _log_mutex;
+
     nlohmann::json _json;
 
     std::vector<Entry> _entries;

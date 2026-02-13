@@ -31,10 +31,15 @@ void Logger::initialise() {
     FileUtility::create_file(this->_log_path);
 }
 
+// NOTE: Added a scoped lock. In deployment must remove lock for parallelism.
 void Logger::log(Severity severity, const char *file, const char *function, int line, std::string message) {
     Entry entry(severity, file, function, line, message);
 
-    this->add_entry(entry);
+    {
+        std::lock_guard<std::mutex> lock(this->_log_mutex);
+
+        this->add_entry(entry);
+    }
 
     std::cout << entry.to_string() << std::endl;
 }

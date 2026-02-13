@@ -7,6 +7,7 @@
 #include "engine/world/config.hpp"
 #include "engine/world/generator.hpp"
 #include "engine/world/height_map.hpp"
+#include "engine/world/chunk_state.hpp"
 
 #include "engine/model/mesh.hpp"
 #include "engine/model/topology.hpp"
@@ -31,9 +32,17 @@ class Chunk {
 
     void generate_mesh();
 
+    void occlude_faces(std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> &chunks);
+
+    void upload_mesh();
+
     void render(engine::shader::Shader &shader);
 
     engine::world::Block &get_block(int x, int y, int z);
+
+    engine::world::ChunkState get_state();
+
+    void set_state(const engine::world::ChunkState &state);
 
   private:
     static inline constexpr engine::model::Topology _TOPOLOGY = engine::model::Topology::TRIANGLE;
@@ -48,9 +57,9 @@ class Chunk {
 
     std::vector<engine::world::Face> _faces;
 
-    int get_block_id(int x, int y, int z);
+    std::atomic<engine::world::ChunkState> _state;
 
-    void cull_faces(std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> &chunks, engine::world::Block &block, int x, int y, int z);
+    int get_block_id(int x, int y, int z);
 
     /**
      * @brief Culls a face of @p block_a based on the presence and type of an adjacent block (@p block_b).

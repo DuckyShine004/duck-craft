@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtx/hash.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include "engine/world/chunk.hpp"
 
@@ -20,6 +21,8 @@ Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), glo
     this->local_x = global_x >> config::CHUNK_SIZE_BITS;
     this->local_y = global_y >> config::CHUNK_SIZE_BITS;
     this->local_z = global_z >> config::CHUNK_SIZE_BITS;
+
+    this->set_state(ChunkState::EMPTY);
 }
 
 void Chunk::generate(Generator &generator, std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks, HeightMap &height_map) {
@@ -29,8 +32,6 @@ void Chunk::generate(Generator &generator, std::unordered_map<glm::ivec3, std::u
                 Block &block = this->get_block(x, y, z);
 
                 block.set_type(BlockType::GRASS);
-
-                this->cull_faces(chunks, block, x, y, z);
             }
         }
     }
@@ -68,9 +69,14 @@ void Chunk::generate_mesh() {
 
     int total_faces = this->_faces.size();
 
-    LOG_DEBUG("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
+    // LOG_DEBUG("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
+}
 
+// NOTE: Once mesh is uploaded, we can set state to render
+void Chunk::upload_mesh() {
     this->_mesh.upload();
+
+    this->set_state(ChunkState::RENDERING);
 }
 
 void Chunk::merge_faces(BlockType &block_type, FaceType &face_type) {
@@ -221,40 +227,51 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
     }
 }
 
-void Chunk::cull_faces(std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks, Block &block, int x, int y, int z) {
-    for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
-        int nx = Face::I_NORMALS[face_type_index][0];
-        int ny = Face::I_NORMALS[face_type_index][1];
-        int nz = Face::I_NORMALS[face_type_index][2];
+// BUG: Caused by internal map corruption (inserts may trigger rehashes >:( )
+void Chunk::occlude_faces(std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks) {
+    for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+        for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+            for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+                Block &block = this->get_block(x, y, z);
 
-        int dx = x + nx;
-        int dy = y + ny;
-        int dz = z + nz;
+                for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
+                    int nx = Face::I_NORMALS[face_type_index][0];
+                    int ny = Face::I_NORMALS[face_type_index][1];
+                    int nz = Face::I_NORMALS[face_type_index][2];
 
-        int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
+                    int dx = x + nx;
+                    int dy = y + ny;
+                    int dz = z + nz;
 
-        if (dx < 0 || dx >= config::CHUNK_SIZE || dy < 0 || dy >= config::CHUNK_SIZE || dz < 0 || dz >= config::CHUNK_SIZE) {
-            glm::ivec3 chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
+                    int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
 
-            auto chunk_iterator = chunks.find(chunk_id);
+                    if (dx < 0 || dx >= config::CHUNK_SIZE || dy < 0 || dy >= config::CHUNK_SIZE || dz < 0 || dz >= config::CHUNK_SIZE) {
+                        glm::ivec3 chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
 
-            if (chunk_iterator != chunks.end()) {
-                int bx = dx & (config::CHUNK_SIZE - 1);
-                int by = dy & (config::CHUNK_SIZE - 1);
-                int bz = dz & (config::CHUNK_SIZE - 1);
+                        auto chunk_iterator = chunks.find(chunk_id);
 
-                Chunk &chunk = *chunk_iterator->second.get();
+                        if (chunk_iterator != chunks.end()) {
+                            int bx = dx & (config::CHUNK_SIZE - 1);
+                            int by = dy & (config::CHUNK_SIZE - 1);
+                            int bz = dz & (config::CHUNK_SIZE - 1);
 
-                Block &adjacent_block = chunk.get_block(bx, by, bz);
+                            Chunk *chunk = chunk_iterator->second.get();
 
-                this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
-                this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
+                            if (chunk->get_state() >= ChunkState::RENDERING) {
+                                Block &adjacent_block = chunk->get_block(bx, by, bz);
+
+                                this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
+                                this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
+                            }
+                        }
+                    } else {
+                        Block &adjacent_block = this->get_block(dx, dy, dz);
+
+                        this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
+                        this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
+                    }
+                }
             }
-        } else {
-            Block &adjacent_block = this->get_block(dx, dy, dz);
-
-            this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
-            this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
         }
     }
 }
@@ -275,6 +292,10 @@ void Chunk::clear_mesh() {
 }
 
 void Chunk::render(Shader &shader) {
+    if (this->get_state() != ChunkState::RENDERING) {
+        return;
+    }
+
     glm::mat4 model(1.0f);
 
     shader.set_matrix4fv("u_model", model);
@@ -292,6 +313,14 @@ Block &Chunk::get_block(int x, int y, int z) {
     int id = this->get_block_id(x, y, z);
 
     return this->_blocks[id];
+}
+
+ChunkState Chunk::get_state() {
+    return this->_state.load(std::memory_order_acquire);
+}
+
+void Chunk::set_state(const ChunkState &state) {
+    this->_state.store(state, std::memory_order_release);
 }
 
 } // namespace engine::world
