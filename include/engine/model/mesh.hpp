@@ -9,6 +9,10 @@ namespace engine::model {
 
 class Mesh {
   public:
+    Mesh();
+
+    ~Mesh();
+
     void upload();
 
     void render(engine::model::Topology topology);
@@ -74,6 +78,8 @@ class Mesh {
     unsigned long get_indices_size();
 
     void clear_vertices();
+
+    void clear();
 
   private:
     static inline constexpr unsigned int _POSITION_ATTRIBUTE = 0;

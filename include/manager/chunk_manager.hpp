@@ -8,11 +8,15 @@
 #include <memory>
 #include <unordered_map>
 
+#include <boost/unordered/concurrent_flat_map.hpp>
+
 #include "engine/world/chunk.hpp"
 #include "engine/world/generator.hpp"
 #include "engine/world/height_map.hpp"
 
 #include "engine/threading/thread_pool.hpp"
+
+#include "engine/math/hash/vector/ivec3.hpp"
 
 #include "engine/shader/shader.hpp"
 
@@ -40,7 +44,9 @@ class ChunkManager final : public Manager {
     std::shared_ptr<engine::world::Generator> _generator;
 
     // PERF: Performance of hash function is unknown, but data integrity is gauranteed?
-    std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> _chunks;
+    boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> _chunks;
+
+    // std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> _chunks;
 
     std::unordered_map<glm::ivec2, std::unique_ptr<engine::world::HeightMap>> _height_maps;
 

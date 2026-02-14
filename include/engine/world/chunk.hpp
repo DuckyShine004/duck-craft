@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include <boost/unordered/concurrent_flat_map.hpp>
+
 #include "engine/world/face.hpp"
 #include "engine/world/block.hpp"
 #include "engine/world/config.hpp"
@@ -11,6 +13,8 @@
 
 #include "engine/model/mesh.hpp"
 #include "engine/model/topology.hpp"
+
+#include "engine/math/hash/vector/ivec3.hpp"
 
 #include "engine/shader/shader.hpp"
 
@@ -28,11 +32,11 @@ class Chunk {
 
     Chunk(int global_x, int global_y, int global_z);
 
-    void generate(engine::world::Generator &generator, std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> &chunks, engine::world::HeightMap &height_map);
+    void generate(engine::world::Generator &generator, engine::world::HeightMap &height_map);
 
     void generate_mesh();
 
-    void occlude_faces(std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> &chunks);
+    void occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
 
     void upload_mesh();
 
@@ -77,6 +81,10 @@ class Chunk {
     void merge_YZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type);
 
     void add_face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
+
+    void occlude_XY_faces(engine::world::Chunk &adjacent_chunk, engine::world::FaceType &face_type);
+    void occlude_XZ_faces(engine::world::Chunk &adjacent_chunk, engine::world::FaceType &face_type);
+    void occlude_YZ_faces(engine::world::Chunk &adjacent_chunk, engine::world::FaceType &face_type);
 
     void clear_mesh();
 };

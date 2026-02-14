@@ -81,7 +81,7 @@ void Engine::render() {
 
     Camera *current_camera = camera_manager.get_camera();
 
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     ShaderManager &shader_manager = ShaderManager::get_instance();
 

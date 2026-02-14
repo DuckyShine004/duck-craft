@@ -25,7 +25,6 @@ void ChunkManager::initialise() {
     this->_generator = std::make_shared<Generator>();
 }
 
-// TODO: Thread entire chunk generation, including heightmap and chunk map
 void ChunkManager::generate_chunk(const glm::vec3 &position) {
     int global_x = static_cast<int>(position.x);
     int global_y = static_cast<int>(position.y);
@@ -57,32 +56,20 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
 
     glm::ivec3 chunk_id(local_x, local_y, local_z);
 
-    auto chunk_iterator = this->_chunks.find(chunk_id);
-
-    if (chunk_iterator == this->_chunks.end()) {
-        std::unique_ptr<Chunk> chunk = std::make_unique<Chunk>(global_x, global_y, global_z);
-
-        auto [iterator, is_emplaced] = this->_chunks.emplace(chunk_id, std::move(chunk));
-
-        chunk_iterator = iterator;
+    if (!this->_chunks.contains(chunk_id)) {
+        this->_chunks.insert({chunk_id, std::make_unique<Chunk>(global_x, global_y, global_z)});
     }
 
-    Chunk *chunk_pointer = chunk_iterator->second.get();
+    this->_thread_pool->push([this, chunk_id, height_map_pointer]() {
+        Chunk *chunk_pointer;
 
-    // TODO: Child thread- cull neighbour meshes and regenerate mesh if needed
-
-    this->_thread_pool->push([this, chunk_pointer, height_map_pointer]() {
-        if (chunk_pointer == nullptr) {
-            LOG_ERROR("Chunk pointer is NULL");
-        }
-
-        if (height_map_pointer == nullptr) {
-            LOG_ERROR("Height map pointer is NULL");
-        }
+        this->_chunks.visit(chunk_id, [&](const auto &pair) {
+            chunk_pointer = pair.second.get();
+        });
 
         chunk_pointer->set_state(ChunkState::GENERATING_TERRAIN);
 
-        chunk_pointer->generate(*this->_generator, this->_chunks, *height_map_pointer);
+        chunk_pointer->generate(*this->_generator, *height_map_pointer);
 
         chunk_pointer->set_state(ChunkState::OCCLUDING_FACES);
 
@@ -96,9 +83,9 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
     });
 }
 
-// TODO: Should instead loop through non-occluded chunks (through chunk culling)
+// TODO: Should instead iterate through chunks that are not culled by frustum
 void ChunkManager::process_chunks() {
-    for (auto &chunk_iterator : this->_chunks) {
+    this->_chunks.visit_all([](const auto &chunk_iterator) {
         Chunk *chunk = chunk_iterator.second.get();
 
         ChunkState chunk_state = chunk->get_state();
@@ -110,7 +97,7 @@ void ChunkManager::process_chunks() {
             default:
                 break;
         }
-    }
+    });
 }
 
 void ChunkManager::render(Shader &shader) {
@@ -118,9 +105,13 @@ void ChunkManager::render(Shader &shader) {
         return;
     }
 
-    for (auto &chunk_iterator : this->_chunks) {
-        chunk_iterator.second.get()->render(shader);
-    }
+    this->_chunks.visit_all([&](const auto &chunk_iterator) {
+        Chunk *chunk = chunk_iterator.second.get();
+
+        if (chunk->get_state() == ChunkState::RENDERING) {
+            chunk_iterator.second.get()->render(shader);
+        }
+    });
 }
 
 void ChunkManager::set_thread_pool(ThreadPool &thread_pool) {

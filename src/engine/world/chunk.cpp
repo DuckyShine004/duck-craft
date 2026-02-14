@@ -14,6 +14,8 @@
 
 using namespace engine::shader;
 
+using namespace engine::math::hash::vector;
+
 namespace engine::world {
 
 // TODO: Create debug struct for chunk mesh
@@ -25,7 +27,7 @@ Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), glo
     this->set_state(ChunkState::EMPTY);
 }
 
-void Chunk::generate(Generator &generator, std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks, HeightMap &height_map) {
+void Chunk::generate(Generator &generator, HeightMap &height_map) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
@@ -227,8 +229,10 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
     }
 }
 
-// BUG: Caused by internal map corruption (inserts may trigger rehashes >:( )
-void Chunk::occlude_faces(std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> &chunks) {
+// BUG: Caused by internal hashmap corruption (inserts may trigger rehashes >:( )
+// Better design could be to only occlude blocks within chunk? Mark neighbour chunks for remesh if adjacent chunks have been updated
+// // NOTE: Only used by chunk generation, won't be used at a later stage...
+void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
@@ -246,32 +250,95 @@ void Chunk::occlude_faces(std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>>
                     int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
 
                     if (dx < 0 || dx >= config::CHUNK_SIZE || dy < 0 || dy >= config::CHUNK_SIZE || dz < 0 || dz >= config::CHUNK_SIZE) {
-                        glm::ivec3 chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
-
-                        auto chunk_iterator = chunks.find(chunk_id);
-
-                        if (chunk_iterator != chunks.end()) {
-                            int bx = dx & (config::CHUNK_SIZE - 1);
-                            int by = dy & (config::CHUNK_SIZE - 1);
-                            int bz = dz & (config::CHUNK_SIZE - 1);
-
-                            Chunk *chunk = chunk_iterator->second.get();
-
-                            if (chunk->get_state() >= ChunkState::RENDERING) {
-                                Block &adjacent_block = chunk->get_block(bx, by, bz);
-
-                                this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
-                                this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
-                            }
-                        }
-                    } else {
-                        Block &adjacent_block = this->get_block(dx, dy, dz);
-
-                        this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
-                        this->cull_face_based_on_adjacent_block(adjacent_block, block, opposite_face_type_index);
+                        continue;
                     }
+
+                    Block &adjacent_block = this->get_block(dx, dy, dz);
+
+                    this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
                 }
             }
+        }
+    }
+
+    // PERF: Separate chunk border occlusion from local chunk occlusionS
+    // NOTE: Also only used by chunk generation for now...
+    for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
+        int nx = Face::I_NORMALS[face_type_index][0];
+        int ny = Face::I_NORMALS[face_type_index][1];
+        int nz = Face::I_NORMALS[face_type_index][2];
+
+        glm::ivec3 adjacent_chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
+
+        Chunk *adjacent_chunk = nullptr;
+
+        chunks.visit(adjacent_chunk_id, [&](const auto &chunk_iterator) {
+            adjacent_chunk = chunk_iterator.second.get();
+        });
+
+        if (adjacent_chunk == nullptr || adjacent_chunk->get_state() <= ChunkState::GENERATING_TERRAIN) {
+            continue;
+        }
+
+        FaceType face_type = static_cast<FaceType>(face_type_index);
+
+        if (face_type == FaceType::FRONT || face_type == FaceType::BACK) {
+            this->occlude_XY_faces(*adjacent_chunk, face_type);
+        } else if (face_type == FaceType::TOP || face_type == FaceType::BOTTOM) {
+            this->occlude_XZ_faces(*adjacent_chunk, face_type);
+        } else {
+            this->occlude_YZ_faces(*adjacent_chunk, face_type);
+        }
+    }
+}
+
+void Chunk::occlude_XY_faces(Chunk &adjacent_chunk, FaceType &face_type) {
+    int z = (face_type == FaceType::BACK) ? 0 : config::CHUNK_SIZE - 1;
+
+    int dz = config::CHUNK_SIZE - z - 1;
+
+    int face_type_index = static_cast<int>(face_type);
+
+    for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+        for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+            Block &block = this->get_block(x, y, z);
+            Block &adjacent_block = adjacent_chunk.get_block(x, y, dz);
+
+            this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
+        }
+    }
+}
+
+void Chunk::occlude_XZ_faces(Chunk &adjacent_chunk, FaceType &face_type) {
+    int y = (face_type == FaceType::BOTTOM) ? 0 : config::CHUNK_SIZE - 1;
+
+    int dy = config::CHUNK_SIZE - y - 1;
+
+    int face_type_index = static_cast<int>(face_type);
+
+    for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+        for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+            Block &block = this->get_block(x, y, z);
+            Block &adjacent_block = adjacent_chunk.get_block(x, dy, z);
+
+            this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
+        }
+    }
+}
+
+void Chunk::occlude_YZ_faces(Chunk &adjacent_chunk, FaceType &face_type) {
+    int x = (face_type == FaceType::LEFT) ? 0 : config::CHUNK_SIZE - 1;
+
+    int dx = config::CHUNK_SIZE - x - 1;
+
+    int face_type_index = static_cast<int>(face_type);
+
+    for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+        for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+            Block &block = this->get_block(x, y, z);
+            Block &adjacent_block = adjacent_chunk.get_block(dx, y, z);
+
+            this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
         }
     }
 }
@@ -286,7 +353,7 @@ void Chunk::cull_face_based_on_adjacent_block(Block &block_a, Block &block_b, in
 }
 
 void Chunk::clear_mesh() {
-    this->_mesh.clear_vertices();
+    this->_mesh.clear();
 
     this->_faces.clear();
 }

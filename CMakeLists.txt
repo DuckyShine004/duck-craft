@@ -15,6 +15,8 @@ file(GLOB_RECURSE DUCK_CRAFT_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp"
 
 find_package(PkgConfig REQUIRED)
 find_package(fmt REQUIRED)
+find_package(Boost REQUIRED)
+find_package(TBB REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(FastNoise2 CONFIG REQUIRED)
 
@@ -28,4 +30,5 @@ target_compile_definitions(duck-craft PRIVATE GLFW_INCLUDE_NONE)
 
 target_include_directories(duck-craft PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
-target_link_libraries(duck-craft PRIVATE glfw fmt::fmt FastNoise2::FastNoise)
+target_link_libraries(duck-craft PRIVATE glfw fmt::fmt Boost::boost TBB::tbb
+                                         FastNoise2::FastNoise)
