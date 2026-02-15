@@ -132,7 +132,7 @@ void Camera::scroll(double x, double y) {
     this->_field_of_view -= (float)y;
     this->_field_of_view = glm::clamp(this->_field_of_view, this->_FIELD_OF_VIEW_LIMITS.first, this->_FIELD_OF_VIEW_LIMITS.second);
 
-    LOG_DEBUG("FOV: {}", this->_field_of_view);
+    LOG_INFO("FOV: {}", this->_field_of_view);
 
     this->update_projection();
 }

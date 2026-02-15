@@ -62,7 +62,7 @@ void CameraManager::set_next() {
         }
     }
 
-    LOG_DEBUG("Current camera: {}", this->_camera_iterator->first);
+    LOG_INFO("Current camera: {}", this->_camera_iterator->first);
 }
 
 void CameraManager::set_previous() {
@@ -81,7 +81,7 @@ void CameraManager::set_previous() {
         }
     }
 
-    LOG_DEBUG("Current camera: {}", this->_camera_iterator->first);
+    LOG_INFO("Current camera: {}", this->_camera_iterator->first);
 }
 
 engine::camera::Camera *CameraManager::get_camera() {

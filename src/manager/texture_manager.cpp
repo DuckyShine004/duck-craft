@@ -1,5 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 
+#include <iostream>
+
 #include "external/stb/stb_image.h"
 
 #include "external/magic_enum/magic_enum.hpp"
@@ -69,7 +71,7 @@ GLuint TextureManager::generate_texture_handle(const std::string &handle_name) {
 }
 
 void TextureManager::load_texture(std::string &texture_path, int texture_index, GLuint texture_handle) {
-    LOG_DEBUG("Texture path: {}", texture_path);
+    LOG_INFO("Texture path: {}", texture_path);
 
     int width;
     int height;
@@ -90,7 +92,6 @@ void TextureManager::load_texture(std::string &texture_path, int texture_index, 
 }
 
 void TextureManager::load_block_textures() {
-    // Create texture handle for block textures
     GLuint texture_handle = this->generate_texture_handle("blocks");
 
     std::string directory = std::string(this->_PARENT_DIRECTORY) + "blocks";

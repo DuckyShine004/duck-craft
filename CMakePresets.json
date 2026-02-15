@@ -6,6 +6,8 @@
       "generator": "Ninja",
       "binaryDir": "build",
       "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_SUPPRESS_DEVELOPER_WARNINGS": "TRUE",
         "CMAKE_PREFIX_PATH": {
           "type": "STRING",
           "value": "$env{FASTNOISE2_PREFIX}"

@@ -38,6 +38,8 @@ class Chunk {
 
     void occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
 
+    void occlude_border_faces_based_on_adjacent_chunk(engine::world::Chunk &adjacent_chunk);
+
     void upload_mesh();
 
     void render(engine::shader::Shader &shader);
@@ -66,13 +68,13 @@ class Chunk {
     int get_block_id(int x, int y, int z);
 
     /**
-     * @brief Culls a face of @p block_a based on the presence and type of an adjacent block (@p block_b).
+     * @brief Culls a face of @p block based on the presence and type of an adjacent block (@p adjacent_block).
      *
-     * @param block_a: The block whose face may be culled.
-     * @param block_b: The adjacent block used to determine whether the face of @block_a should be culled.
-     * @param face_type_index The face direction of @p block_a.
+     * @param block: The block whose face may be culled.
+     * @param adjacent_block: The adjacent block used to determine whether the face of @block should be culled.
+     * @param face_type_index The face direction of @p block.
      */
-    void cull_face_based_on_adjacent_block(engine::world::Block &block_a, engine::world::Block &block_b, int face_type_index);
+    void cull_face_based_on_adjacent_block(engine::world::Block &block, engine::world::Block &adjacent_block, int face_type_index);
 
     void merge_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type);
 
@@ -82,9 +84,11 @@ class Chunk {
 
     void add_face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
 
-    void occlude_XY_faces(engine::world::Chunk &adjacent_chunk, engine::world::FaceType &face_type);
-    void occlude_XZ_faces(engine::world::Chunk &adjacent_chunk, engine::world::FaceType &face_type);
-    void occlude_YZ_faces(engine::world::Chunk &adjacent_chunk, engine::world::FaceType &face_type);
+    void occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
+
+    void occlude_XY_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
+    void occlude_XZ_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
+    void occlude_YZ_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
 
     void clear_mesh();
 };

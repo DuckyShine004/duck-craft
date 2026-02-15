@@ -71,7 +71,7 @@ void Chunk::generate_mesh() {
 
     int total_faces = this->_faces.size();
 
-    // LOG_DEBUG("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
+    // LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
 }
 
 // NOTE: Once mesh is uploaded, we can set state to render
@@ -263,6 +263,10 @@ void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std:
 
     // PERF: Separate chunk border occlusion from local chunk occlusionS
     // NOTE: Also only used by chunk generation for now...
+    this->occlude_border_faces(chunks);
+}
+
+void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks) {
     for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
         int nx = Face::I_NORMALS[face_type_index][0];
         int ny = Face::I_NORMALS[face_type_index][1];
@@ -292,7 +296,33 @@ void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std:
     }
 }
 
-void Chunk::occlude_XY_faces(Chunk &adjacent_chunk, FaceType &face_type) {
+void Chunk::occlude_border_faces_based_on_adjacent_chunk(Chunk &adjacent_chunk) {
+    int nx = adjacent_chunk.local_x - this->local_x;
+    int ny = adjacent_chunk.local_y - this->local_y;
+    int nz = adjacent_chunk.local_z - this->local_z;
+
+    FaceType face_type;
+
+    if (nx < 0) {
+        this->occlude_YZ_faces(adjacent_chunk, FaceType::LEFT);
+    } else if (nx > 0) {
+        this->occlude_YZ_faces(adjacent_chunk, FaceType::RIGHT);
+    }
+
+    if (ny < 0) {
+        this->occlude_XZ_faces(adjacent_chunk, FaceType::BOTTOM);
+    } else if (ny > 0) {
+        this->occlude_XZ_faces(adjacent_chunk, FaceType::TOP);
+    }
+
+    if (nz < 0) {
+        this->occlude_XY_faces(adjacent_chunk, FaceType::BACK);
+    } else if (nz > 0) {
+        this->occlude_XY_faces(adjacent_chunk, FaceType::FRONT);
+    }
+}
+
+void Chunk::occlude_XY_faces(Chunk &adjacent_chunk, const FaceType &face_type) {
     int z = (face_type == FaceType::BACK) ? 0 : config::CHUNK_SIZE - 1;
 
     int dz = config::CHUNK_SIZE - z - 1;
@@ -309,7 +339,7 @@ void Chunk::occlude_XY_faces(Chunk &adjacent_chunk, FaceType &face_type) {
     }
 }
 
-void Chunk::occlude_XZ_faces(Chunk &adjacent_chunk, FaceType &face_type) {
+void Chunk::occlude_XZ_faces(Chunk &adjacent_chunk, const FaceType &face_type) {
     int y = (face_type == FaceType::BOTTOM) ? 0 : config::CHUNK_SIZE - 1;
 
     int dy = config::CHUNK_SIZE - y - 1;
@@ -326,7 +356,7 @@ void Chunk::occlude_XZ_faces(Chunk &adjacent_chunk, FaceType &face_type) {
     }
 }
 
-void Chunk::occlude_YZ_faces(Chunk &adjacent_chunk, FaceType &face_type) {
+void Chunk::occlude_YZ_faces(Chunk &adjacent_chunk, const FaceType &face_type) {
     int x = (face_type == FaceType::LEFT) ? 0 : config::CHUNK_SIZE - 1;
 
     int dx = config::CHUNK_SIZE - x - 1;
