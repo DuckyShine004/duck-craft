@@ -38,7 +38,7 @@ class Chunk {
 
     void occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
 
-    void occlude_border_faces_based_on_adjacent_chunk(engine::world::Chunk &adjacent_chunk);
+    void occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
 
     void upload_mesh();
 
@@ -49,6 +49,16 @@ class Chunk {
     engine::world::ChunkState get_state();
 
     void set_state(const engine::world::ChunkState &state);
+
+    std::uint8_t get_dirty_borders_mask_and_reset();
+
+    void set_dirty_border_state(int face_type_index, bool state);
+
+    bool has_dirty_borders();
+
+    bool is_terrain_generation_complete();
+
+    void set_is_terrain_generation_complete(bool is_terrain_generation_complete);
 
   private:
     static inline constexpr engine::model::Topology _TOPOLOGY = engine::model::Topology::TRIANGLE;
@@ -64,6 +74,10 @@ class Chunk {
     std::vector<engine::world::Face> _faces;
 
     std::atomic<engine::world::ChunkState> _state;
+
+    std::atomic<bool> _is_terrain_generation_complete;
+
+    std::atomic<std::uint8_t> _dirty_borders_mask;
 
     int get_block_id(int x, int y, int z);
 

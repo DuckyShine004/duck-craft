@@ -1,3 +1,4 @@
+#include <boost/core/allocator_access.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <glm/glm.hpp>
@@ -25,6 +26,9 @@ Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), glo
     this->local_z = global_z >> config::CHUNK_SIZE_BITS;
 
     this->set_state(ChunkState::EMPTY);
+
+    this->_dirty_borders_mask = 0U;
+    this->set_is_terrain_generation_complete(false);
 }
 
 void Chunk::generate(Generator &generator, HeightMap &height_map) {
@@ -71,7 +75,7 @@ void Chunk::generate_mesh() {
 
     int total_faces = this->_faces.size();
 
-    // LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
+    LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
 }
 
 // NOTE: Once mesh is uploaded, we can set state to render
@@ -280,7 +284,7 @@ void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec
             adjacent_chunk = chunk_iterator.second.get();
         });
 
-        if (adjacent_chunk == nullptr || adjacent_chunk->get_state() <= ChunkState::GENERATING_TERRAIN) {
+        if (adjacent_chunk == nullptr || !adjacent_chunk->is_terrain_generation_complete()) {
             continue;
         }
 
@@ -296,29 +300,47 @@ void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec
     }
 }
 
-void Chunk::occlude_border_faces_based_on_adjacent_chunk(Chunk &adjacent_chunk) {
-    int nx = adjacent_chunk.local_x - this->local_x;
-    int ny = adjacent_chunk.local_y - this->local_y;
-    int nz = adjacent_chunk.local_z - this->local_z;
+void Chunk::occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks) {
+    uint8_t mask = this->get_dirty_borders_mask_and_reset();
 
-    FaceType face_type;
+    uint8_t dirty_borders_mask = 0U;
 
-    if (nx < 0) {
-        this->occlude_YZ_faces(adjacent_chunk, FaceType::LEFT);
-    } else if (nx > 0) {
-        this->occlude_YZ_faces(adjacent_chunk, FaceType::RIGHT);
+    while (mask) {
+        int face_type_index = std::countr_zero(mask);
+
+        mask &= (mask - 1);
+
+        int nx = Face::I_NORMALS[face_type_index][0];
+        int ny = Face::I_NORMALS[face_type_index][1];
+        int nz = Face::I_NORMALS[face_type_index][2];
+
+        glm::ivec3 adjacent_chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
+
+        Chunk *adjacent_chunk = nullptr;
+
+        chunks.visit(adjacent_chunk_id, [&](const auto &chunk_iterator) {
+            adjacent_chunk = chunk_iterator.second.get();
+        });
+
+        if (adjacent_chunk == nullptr || !adjacent_chunk->is_terrain_generation_complete()) {
+            dirty_borders_mask |= (1U << face_type_index);
+
+            continue;
+        }
+
+        FaceType face_type = static_cast<FaceType>(face_type_index);
+
+        if (face_type == FaceType::FRONT || face_type == FaceType::BACK) {
+            this->occlude_XY_faces(*adjacent_chunk, face_type);
+        } else if (face_type == FaceType::TOP || face_type == FaceType::BOTTOM) {
+            this->occlude_XZ_faces(*adjacent_chunk, face_type);
+        } else {
+            this->occlude_YZ_faces(*adjacent_chunk, face_type);
+        }
     }
 
-    if (ny < 0) {
-        this->occlude_XZ_faces(adjacent_chunk, FaceType::BOTTOM);
-    } else if (ny > 0) {
-        this->occlude_XZ_faces(adjacent_chunk, FaceType::TOP);
-    }
-
-    if (nz < 0) {
-        this->occlude_XY_faces(adjacent_chunk, FaceType::BACK);
-    } else if (nz > 0) {
-        this->occlude_XY_faces(adjacent_chunk, FaceType::FRONT);
+    if (dirty_borders_mask) {
+        this->_dirty_borders_mask.fetch_or(dirty_borders_mask, std::memory_order_release);
     }
 }
 
@@ -418,6 +440,30 @@ ChunkState Chunk::get_state() {
 
 void Chunk::set_state(const ChunkState &state) {
     this->_state.store(state, std::memory_order_release);
+}
+
+std::uint8_t Chunk::get_dirty_borders_mask_and_reset() {
+    return this->_dirty_borders_mask.exchange(0U, std::memory_order_acq_rel);
+}
+
+bool Chunk::has_dirty_borders() {
+    return this->_dirty_borders_mask.load(std::memory_order_acquire) > 0U;
+}
+
+void Chunk::set_dirty_border_state(int face_type_index, bool state) {
+    if (state) {
+        this->_dirty_borders_mask.fetch_or(1U << face_type_index, std::memory_order_release);
+    } else {
+        this->_dirty_borders_mask.fetch_and(~(1U << face_type_index), std::memory_order_release);
+    }
+}
+
+void Chunk::set_is_terrain_generation_complete(bool is_terrain_generation_complete) {
+    this->_is_terrain_generation_complete.store(is_terrain_generation_complete, std::memory_order_release);
+}
+
+bool Chunk::is_terrain_generation_complete() {
+    return this->_is_terrain_generation_complete.load(std::memory_order_acquire);
 }
 
 } // namespace engine::world

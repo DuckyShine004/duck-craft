@@ -52,7 +52,7 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
         height_map_iterator = iterator;
     }
 
-    HeightMap *height_map_pointer = height_map_iterator->second.get();
+    HeightMap *height_map = height_map_iterator->second.get();
 
     glm::ivec3 chunk_id(local_x, local_y, local_z);
 
@@ -60,33 +60,84 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
         this->_chunks.insert({chunk_id, std::make_unique<Chunk>(global_x, global_y, global_z)});
     }
 
-    this->_thread_pool->push([this, chunk_id, height_map_pointer]() {
-        Chunk *chunk_pointer;
+    this->_thread_pool->push([this, chunk_id, height_map]() {
+        Chunk *chunk;
 
         this->_chunks.visit(chunk_id, [&](const auto &pair) {
-            chunk_pointer = pair.second.get();
+            chunk = pair.second.get();
         });
 
-        chunk_pointer->set_state(ChunkState::GENERATING_TERRAIN);
+        chunk->set_state(ChunkState::GENERATING_TERRAIN);
 
-        chunk_pointer->generate(*this->_generator, *height_map_pointer);
+        chunk->generate(*this->_generator, *height_map);
 
-        chunk_pointer->set_state(ChunkState::OCCLUDING_FACES);
+        chunk->set_is_terrain_generation_complete(true);
 
-        chunk_pointer->occlude_faces(this->_chunks);
+        if (chunk->has_dirty_borders()) {
+            return;
+        }
 
-        chunk_pointer->set_state(ChunkState::GENERATING_MESH);
+        for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
+            int nx = Face::I_NORMALS[face_type_index][0];
+            int ny = Face::I_NORMALS[face_type_index][1];
+            int nz = Face::I_NORMALS[face_type_index][2];
 
-        chunk_pointer->generate_mesh();
+            glm::ivec3 adjacent_chunk_id(chunk->local_x + nx, chunk->local_y + ny, chunk->local_z + nz);
 
-        chunk_pointer->set_state(ChunkState::UPLOADING_MESH);
+            Chunk *adjacent_chunk = nullptr;
+
+            this->_chunks.visit(adjacent_chunk_id, [&](const auto &chunk_iterator) {
+                adjacent_chunk = chunk_iterator.second.get();
+            });
+
+            if (adjacent_chunk == nullptr) {
+                continue;
+            }
+
+            int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
+
+            adjacent_chunk->set_dirty_border_state(opposite_face_type_index, true);
+        }
+
+        chunk->set_state(ChunkState::OCCLUDING_FACES);
+
+        chunk->occlude_faces(this->_chunks);
+
+        if (chunk->has_dirty_borders()) {
+            return;
+        }
+
+        chunk->set_state(ChunkState::GENERATING_MESH);
+
+        chunk->generate_mesh();
+
+        if (chunk->has_dirty_borders()) {
+            return;
+        }
+
+        chunk->set_state(ChunkState::UPLOADING_MESH);
     });
 }
 
 // TODO: Should instead iterate through chunks that are not culled by frustum
 void ChunkManager::process_chunks() {
-    this->_chunks.visit_all([](const auto &chunk_iterator) {
+    this->_chunks.visit_all([&](const auto &chunk_iterator) {
         Chunk *chunk = chunk_iterator.second.get();
+
+        // Check if the chunk generation is complete
+        if (chunk->is_terrain_generation_complete()) {
+            // Check if the chunk has dirty borders due to incomplete face occlusion
+            if (chunk->has_dirty_borders()) {
+                this->_thread_pool->push([this, chunk]() {
+                    chunk->occlude_dirty_borders(this->_chunks);
+
+                    chunk->generate_mesh();
+
+                    chunk->set_state(ChunkState::UPLOADING_MESH);
+                });
+                return;
+            }
+        }
 
         ChunkState chunk_state = chunk->get_state();
 
