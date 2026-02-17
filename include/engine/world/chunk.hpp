@@ -56,6 +56,10 @@ class Chunk {
 
     bool has_dirty_borders();
 
+    bool can_dirty_border_task_run();
+
+    void set_is_dirty_border_task_running(bool is_dirty_border_task_running);
+
     bool is_terrain_generation_complete();
 
     void set_is_terrain_generation_complete(bool is_terrain_generation_complete);
@@ -75,6 +79,8 @@ class Chunk {
 
     std::atomic<engine::world::ChunkState> _state;
 
+    std::atomic<bool> _is_dirty_border_task_running;
+
     std::atomic<bool> _is_terrain_generation_complete;
 
     std::atomic<std::uint8_t> _dirty_borders_mask;
@@ -90,11 +96,11 @@ class Chunk {
      */
     void cull_face_based_on_adjacent_block(engine::world::Block &block, engine::world::Block &adjacent_block, int face_type_index);
 
-    void merge_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type);
+    void merge_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
 
-    void merge_XY_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type);
-    void merge_XZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type);
-    void merge_YZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type);
+    void merge_XY_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_XZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_YZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
 
     void add_face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
 

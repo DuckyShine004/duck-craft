@@ -30,7 +30,9 @@ class Face {
     int height;
     int depth;
 
-    Face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int x, int y, int z, int width, int height, int depth);
+    int texture_id;
+
+    Face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int x, int y, int z, int width, int height, int depth, int texture_id);
 
     void add_to_mesh(engine::model::Mesh &mesh);
 

@@ -11,8 +11,8 @@ HeightMap::HeightMap() {
 void HeightMap::generate(Generator &generator, int global_chunk_x, int global_chunk_z) {
     int id = 0;
 
-    for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
-        for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
+    for (int dz = 0; dz < config::CHUNK_SIZE; ++dz) {
+        for (int dx = 0; dx < config::CHUNK_SIZE; ++dx) {
             int global_x = global_chunk_x + dx;
             int global_z = global_chunk_z + dz;
 

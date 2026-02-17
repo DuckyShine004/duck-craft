@@ -43,10 +43,7 @@ class ChunkManager final : public Manager {
   private:
     std::shared_ptr<engine::world::Generator> _generator;
 
-    // PERF: Performance of hash function is unknown, but data integrity is gauranteed?
     boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> _chunks;
-
-    // std::unordered_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>> _chunks;
 
     std::unordered_map<glm::ivec2, std::unique_ptr<engine::world::HeightMap>> _height_maps;
 

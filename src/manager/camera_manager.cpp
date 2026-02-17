@@ -102,7 +102,6 @@ engine::camera::Camera *CameraManager::get_camera(std::string name) {
     return iterator->second.get();
 }
 
-// PERF: Only for debugging, after which use only a SINGLE camera, and make sure not modifiable
 std::vector<engine::camera::Camera *> CameraManager::get_cameras() const {
     std::vector<Camera *> cameras;
 

@@ -1,4 +1,3 @@
-#include <boost/core/allocator_access.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <glm/glm.hpp>
@@ -19,7 +18,6 @@ using namespace engine::math::hash::vector;
 
 namespace engine::world {
 
-// TODO: Create debug struct for chunk mesh
 Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), global_y(global_y), global_z(global_z) {
     this->local_x = global_x >> config::CHUNK_SIZE_BITS;
     this->local_y = global_y >> config::CHUNK_SIZE_BITS;
@@ -28,6 +26,9 @@ Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), glo
     this->set_state(ChunkState::EMPTY);
 
     this->_dirty_borders_mask = 0U;
+
+    this->set_is_dirty_border_task_running(false);
+
     this->set_is_terrain_generation_complete(false);
 }
 
@@ -37,7 +38,18 @@ void Chunk::generate(Generator &generator, HeightMap &height_map) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
                 Block &block = this->get_block(x, y, z);
 
-                block.set_type(BlockType::GRASS);
+                int height = height_map.get_height(x, z);
+
+                int dy = this->global_y + y;
+
+                // Generate grass block
+                if (dy == height) {
+                    block.set_type(BlockType::GRASS);
+                } else if (dy < height && dy >= height - 3) {
+                    block.set_type(BlockType::DIRT);
+                } else if (dy < height - 3) {
+                    block.set_type(BlockType::STONE);
+                }
             }
         }
     }
@@ -54,7 +66,9 @@ void Chunk::generate_mesh() {
         for (int block_type_index = 0; block_type_index < number_of_blocks; ++block_type_index) {
             BlockType block_type = static_cast<BlockType>(block_type_index);
 
-            this->merge_faces(block_type, face_type);
+            int texture_id = block_type_index * 6 + face_type_index;
+
+            this->merge_faces(block_type, face_type, texture_id);
         }
     }
 
@@ -75,7 +89,7 @@ void Chunk::generate_mesh() {
 
     int total_faces = this->_faces.size();
 
-    LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
+    // LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
 }
 
 // NOTE: Once mesh is uploaded, we can set state to render
@@ -85,17 +99,17 @@ void Chunk::upload_mesh() {
     this->set_state(ChunkState::RENDERING);
 }
 
-void Chunk::merge_faces(BlockType &block_type, FaceType &face_type) {
+void Chunk::merge_faces(BlockType &block_type, FaceType &face_type, int texture_id) {
     if (face_type == FaceType::FRONT || face_type == FaceType::BACK) {
-        this->merge_XY_faces(block_type, face_type);
+        this->merge_XY_faces(block_type, face_type, texture_id);
     } else if (face_type == FaceType::TOP || face_type == FaceType::BOTTOM) {
-        this->merge_XZ_faces(block_type, face_type);
+        this->merge_XZ_faces(block_type, face_type, texture_id);
     } else {
-        this->merge_YZ_faces(block_type, face_type);
+        this->merge_YZ_faces(block_type, face_type, texture_id);
     }
 }
 
-void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type) {
+void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type, int texture_id) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         std::uint32_t masks[config::CHUNK_SIZE];
 
@@ -117,7 +131,7 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type) {
 
                 int width = std::countr_one(masks[y] >> x);
 
-                std::uint32_t occupancy_mask = (width < 32) ? (((1U << width) - 1) << x) : this->_FULL_MASK;
+                std::uint32_t occupancy_mask = (width < config::CHUNK_SIZE) ? (((1U << width) - 1) << x) : this->_FULL_MASK;
 
                 int height = 0;
 
@@ -135,13 +149,13 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type) {
                 int block_y = this->global_y + y;
                 int block_z = this->global_z + z;
 
-                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, width, height, 0);
+                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, width, height, 0, texture_id);
             }
         }
     }
 }
 
-void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type) {
+void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int texture_id) {
     for (int y = 0; y < config::CHUNK_SIZE; ++y) {
         std::uint32_t masks[config::CHUNK_SIZE];
 
@@ -163,7 +177,7 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type) {
 
                 int width = std::countr_one(masks[z] >> x);
 
-                std::uint32_t occupancy_mask = (width < 32) ? (((1U << width) - 1) << x) : this->_FULL_MASK;
+                std::uint32_t occupancy_mask = (width < config::CHUNK_SIZE) ? (((1U << width) - 1) << x) : this->_FULL_MASK;
 
                 int depth = 0;
 
@@ -181,13 +195,13 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type) {
                 int block_y = this->global_y + y;
                 int block_z = this->global_z + z;
 
-                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, width, 0, depth);
+                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, width, 0, depth, texture_id);
             }
         }
     }
 }
 
-void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
+void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type, int texture_id) {
     for (int x = 0; x < config::CHUNK_SIZE; ++x) {
         std::uint32_t masks[config::CHUNK_SIZE];
 
@@ -209,7 +223,7 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
 
                 int height = std::countr_one(masks[z] >> y);
 
-                std::uint32_t occupancy_mask = (height < 32) ? (((1U << height) - 1) << y) : this->_FULL_MASK;
+                std::uint32_t occupancy_mask = (height < config::CHUNK_SIZE) ? (((1U << height) - 1) << y) : this->_FULL_MASK;
 
                 int depth = 0;
 
@@ -227,22 +241,19 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type) {
                 int block_y = this->global_y + y;
                 int block_z = this->global_z + z;
 
-                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, 0, height, depth);
+                this->_faces.emplace_back(block_type, face_type, block_x, block_y, block_z, 0, height, depth, texture_id);
             }
         }
     }
 }
 
-// BUG: Caused by internal hashmap corruption (inserts may trigger rehashes >:( )
-// Better design could be to only occlude blocks within chunk? Mark neighbour chunks for remesh if adjacent chunks have been updated
-// // NOTE: Only used by chunk generation, won't be used at a later stage...
 void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
                 Block &block = this->get_block(x, y, z);
 
-                for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
+                for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
                     int nx = Face::I_NORMALS[face_type_index][0];
                     int ny = Face::I_NORMALS[face_type_index][1];
                     int nz = Face::I_NORMALS[face_type_index][2];
@@ -265,13 +276,11 @@ void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std:
         }
     }
 
-    // PERF: Separate chunk border occlusion from local chunk occlusionS
-    // NOTE: Also only used by chunk generation for now...
     this->occlude_border_faces(chunks);
 }
 
 void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks) {
-    for (int face_type_index = 0; face_type_index < Face::NUMBER_OF_FACES; ++face_type_index) {
+    for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
         int nx = Face::I_NORMALS[face_type_index][0];
         int ny = Face::I_NORMALS[face_type_index][1];
         int nz = Face::I_NORMALS[face_type_index][2];
@@ -284,7 +293,13 @@ void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec
             adjacent_chunk = chunk_iterator.second.get();
         });
 
-        if (adjacent_chunk == nullptr || !adjacent_chunk->is_terrain_generation_complete()) {
+        if (adjacent_chunk == nullptr) {
+            continue;
+        }
+
+        if (!adjacent_chunk->is_terrain_generation_complete()) {
+            this->set_dirty_border_state(face_type_index, true);
+
             continue;
         }
 
@@ -322,7 +337,11 @@ void Chunk::occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ive
             adjacent_chunk = chunk_iterator.second.get();
         });
 
-        if (adjacent_chunk == nullptr || !adjacent_chunk->is_terrain_generation_complete()) {
+        if (adjacent_chunk == nullptr) {
+            continue;
+        }
+
+        if (!adjacent_chunk->is_terrain_generation_complete()) {
             dirty_borders_mask |= (1U << face_type_index);
 
             continue;
@@ -462,8 +481,19 @@ void Chunk::set_is_terrain_generation_complete(bool is_terrain_generation_comple
     this->_is_terrain_generation_complete.store(is_terrain_generation_complete, std::memory_order_release);
 }
 
+void Chunk::set_is_dirty_border_task_running(bool is_dirty_border_task_running) {
+    this->_is_dirty_border_task_running.store(is_dirty_border_task_running, std::memory_order_release);
+}
+
 bool Chunk::is_terrain_generation_complete() {
     return this->_is_terrain_generation_complete.load(std::memory_order_acquire);
+}
+
+bool Chunk::can_dirty_border_task_run() {
+    bool can_dirty_border_task_run = false;
+
+    // return this->_is_dirty_border_task_running.load(std::memory_order_acquire);
+    return this->_is_dirty_border_task_running.compare_exchange_strong(can_dirty_border_task_run, true, std::memory_order_acq_rel);
 }
 
 } // namespace engine::world

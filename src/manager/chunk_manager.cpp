@@ -73,10 +73,6 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
 
         chunk->set_is_terrain_generation_complete(true);
 
-        if (chunk->has_dirty_borders()) {
-            return;
-        }
-
         for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
             int nx = Face::I_NORMALS[face_type_index][0];
             int ny = Face::I_NORMALS[face_type_index][1];
@@ -125,16 +121,27 @@ void ChunkManager::process_chunks() {
         Chunk *chunk = chunk_iterator.second.get();
 
         // Check if the chunk generation is complete
+        // NOTE: Maybe don't need CAS?
         if (chunk->is_terrain_generation_complete()) {
             // Check if the chunk has dirty borders due to incomplete face occlusion
+
             if (chunk->has_dirty_borders()) {
+                if (!chunk->can_dirty_border_task_run()) {
+                    return;
+                }
+
                 this->_thread_pool->push([this, chunk]() {
                     chunk->occlude_dirty_borders(this->_chunks);
 
-                    chunk->generate_mesh();
+                    if (!chunk->has_dirty_borders()) {
+                        chunk->generate_mesh();
 
-                    chunk->set_state(ChunkState::UPLOADING_MESH);
+                        chunk->set_state(ChunkState::UPLOADING_MESH);
+                    }
+
+                    chunk->set_is_dirty_border_task_running(false);
                 });
+
                 return;
             }
         }

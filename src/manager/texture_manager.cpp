@@ -1,7 +1,5 @@
 #define STB_IMAGE_IMPLEMENTATION
 
-#include <iostream>
-
 #include "external/stb/stb_image.h"
 
 #include "external/magic_enum/magic_enum.hpp"
@@ -60,8 +58,7 @@ GLuint TextureManager::generate_texture_handle(const std::string &handle_name) {
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-    // TODO: 1x6 layer for now
-    int layers = 6;
+    const int layers = static_cast<int>(BlockType::COUNT) * 6;
 
     glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, 16, 16, layers, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
@@ -71,7 +68,7 @@ GLuint TextureManager::generate_texture_handle(const std::string &handle_name) {
 }
 
 void TextureManager::load_texture(std::string &texture_path, int texture_index, GLuint texture_handle) {
-    LOG_INFO("Texture path: {}", texture_path);
+    LOG_INFO("Texture path: {}, ID: {}", texture_path, texture_index);
 
     int width;
     int height;

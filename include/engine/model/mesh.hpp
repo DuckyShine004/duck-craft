@@ -22,6 +22,7 @@ class Mesh {
     void add_vertex(float x, float y, float z);
     void add_vertex(float x, float y, float z, float u, float v);
     void add_vertex(float x, float y, float z, float nx, float ny, float nz, float u, float v);
+    void add_vertex(float x, float y, float z, float nx, float ny, float nz, float u, float v, int texture_id);
 
     void add_index(GLuint index);
 
@@ -85,6 +86,7 @@ class Mesh {
     static inline constexpr unsigned int _POSITION_ATTRIBUTE = 0;
     static inline constexpr unsigned int _NORMAL_ATTRIBUTE = 1;
     static inline constexpr unsigned int _UV_ATTRIBUTE = 2;
+    static inline constexpr unsigned int _TEXTURE_ID_ATTRIBUTE = 3;
 
     GLuint _vao;
     GLuint _vbo;

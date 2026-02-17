@@ -45,10 +45,13 @@ void Mesh::upload() {
         glEnableVertexAttribArray(this->_POSITION_ATTRIBUTE);
         glEnableVertexAttribArray(this->_NORMAL_ATTRIBUTE);
         glEnableVertexAttribArray(this->_UV_ATTRIBUTE);
+        glEnableVertexAttribArray(this->_TEXTURE_ID_ATTRIBUTE);
 
         glVertexAttribPointer(this->_POSITION_ATTRIBUTE, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position));
         glVertexAttribPointer(this->_NORMAL_ATTRIBUTE, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, normal));
         glVertexAttribPointer(this->_UV_ATTRIBUTE, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
+
+        glVertexAttribIPointer(this->_TEXTURE_ID_ATTRIBUTE, 1, GL_UNSIGNED_SHORT, sizeof(Vertex), (void *)offsetof(Vertex, texture_id));
 
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -107,6 +110,10 @@ void Mesh::add_vertex(float x, float y, float z, float u, float v) {
 
 void Mesh::add_vertex(float x, float y, float z, float nx, float ny, float nz, float u, float v) {
     this->_vertices.emplace_back(x, y, z, nx, ny, nz, u, v);
+}
+
+void Mesh::add_vertex(float x, float y, float z, float nx, float ny, float nz, float u, float v, int texture_id) {
+    this->_vertices.emplace_back(x, y, z, nx, ny, nz, u, v, texture_id);
 }
 
 void Mesh::add_index(GLuint index) {
