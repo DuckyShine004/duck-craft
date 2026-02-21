@@ -105,7 +105,7 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
 
         chunk->set_state(ChunkState::GENERATING_MESH);
 
-        chunk->generate_mesh();
+        chunk->generate_mesh(this->_chunks);
 
         if (chunk->has_dirty_borders()) {
             return;
@@ -134,7 +134,7 @@ void ChunkManager::process_chunks() {
                     chunk->occlude_dirty_borders(this->_chunks);
 
                     if (!chunk->has_dirty_borders()) {
-                        chunk->generate_mesh();
+                        chunk->generate_mesh(this->_chunks);
 
                         chunk->set_state(ChunkState::UPLOADING_MESH);
                     }
