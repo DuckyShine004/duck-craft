@@ -86,13 +86,13 @@ void Face::add_back(Mesh &mesh) {
 }
 
 void Face::add_indices(Mesh &mesh, int index_offset) {
-    if (this->ambient_occlusion_states[0] + this->ambient_occlusion_states[2] > this->ambient_occlusion_states[1] + this->ambient_occlusion_states[3]) {
+    if (this->ambient_occlusion_states[1] + this->ambient_occlusion_states[3] > this->ambient_occlusion_states[0] + this->ambient_occlusion_states[2]) {
         mesh.add_index(0 + index_offset);
         mesh.add_index(1 + index_offset);
         mesh.add_index(3 + index_offset);
-        mesh.add_index(1 + index_offset);
         mesh.add_index(2 + index_offset);
         mesh.add_index(3 + index_offset);
+        mesh.add_index(1 + index_offset);
     } else {
         mesh.add_index(0 + index_offset);
         mesh.add_index(1 + index_offset);

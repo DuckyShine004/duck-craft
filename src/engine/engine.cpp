@@ -38,6 +38,8 @@ void Engine::initialise() {
 
     camera_manager.set_camera("player");
 
+    // chunk_manager.generate_chunk(glm::vec3(0.0f));
+
     const int TEST_CHUNK_SIZE = 3;
 
     for (int x = -2; x < TEST_CHUNK_SIZE; ++x) {

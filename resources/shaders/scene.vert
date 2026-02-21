@@ -25,6 +25,7 @@ out float f_ambient_occlusion;
 flat out uint f_texture_id;
 flat out uint f_face_index;
 
+// PERF: Should probably pass face index to vertex shader
 uint get_face_index(vec3 normal) {
     if (normal.y > 0.0f) {
         return 0U;

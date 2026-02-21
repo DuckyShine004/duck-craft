@@ -30,5 +30,6 @@ void main() {
     // vec4 w_colour = vec4(1.0f);
     // o_colour = vec4(f_colour, 1.0f);
     // o_colour = vec4(w_colour.rgb * face_shade, w_colour.a);
+    // o_colour = vec4(w_colour.rgb * f_ambient_occlusion * face_shade, w_colour.a);
     o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
 }
