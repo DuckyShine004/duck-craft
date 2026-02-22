@@ -4,6 +4,8 @@
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#include <queue>
+
 #include "engine/world/chunk.hpp"
 
 #include "utility/colour_utility.hpp"
@@ -40,7 +42,17 @@ void Chunk::generate(Generator &generator, HeightMap &height_map) {
 
                 int height = height_map.get_height(x, z);
 
+                int dx = this->global_x + x;
                 int dy = this->global_y + y;
+                int dz = this->global_z + z;
+
+                float threshold = generator.get_cave_noise(dx, dy, dz);
+
+                // LOG_INFO("Threshold: {}", threshold);
+
+                if (threshold <= 0.1f || threshold >= 0.9f) {
+                    continue;
+                }
 
                 // Generate grass block
                 if (dy == height) {
@@ -52,6 +64,47 @@ void Chunk::generate(Generator &generator, HeightMap &height_map) {
                 }
             }
         }
+    }
+}
+
+// NOTE: Since chunks is being accessed concurrently during remesh, must also be part of remesh. Must also be calculated straight after generation, or as the first step of remesh
+void Chunk::propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
+    glm::ivec3 top_chunk_position(this->local_x, this->local_y + 1, this->local_z);
+
+    // Check if top chunk is loaded
+    Chunk *top_chunk = nullptr;
+
+    chunks.visit(top_chunk_position, [&](const auto &chunk_iterator) {
+        top_chunk = chunk_iterator.second.get();
+    });
+
+    struct SunLightNode {
+        // Block index
+        int index;
+        int light;
+
+        SunLightNode(int index, int light) : index(index), light(light) {
+        }
+    };
+
+    std::queue<SunLightNode> queue;
+
+    // Top chunk is not generated or loaded yet
+    if (top_chunk == nullptr || !top_chunk->is_terrain_generation_complete()) {
+        for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+            for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+                int id = this->get_block_id(x, config::CHUNK_SIZE, z);
+
+                Block &block = this->_blocks[id];
+
+                if (block.get_type() > BlockType::EMPTY) {
+                    continue;
+                }
+
+                queue.emplace(id, 15);
+            }
+        }
+    } else {
     }
 }
 
@@ -87,7 +140,6 @@ void Chunk::generate_mesh(boost::unordered::concurrent_flat_map<glm::ivec3, std:
     // LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
 }
 
-// NOTE: Once mesh is uploaded, we can set state to render
 void Chunk::upload_mesh() {
     this->_mesh.upload();
 
@@ -197,10 +249,6 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 }
 
 void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, BlockType &block_type, FaceType &face_type, int texture_id) {
-    if (face_type == FaceType::BOTTOM) {
-        return;
-    }
-
     int face_type_index = static_cast<int>(face_type);
 
     for (int y = 0; y < config::CHUNK_SIZE; ++y) {

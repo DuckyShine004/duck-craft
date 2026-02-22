@@ -22,10 +22,20 @@ const float face_shades[6] = float[6](
         0.5f, 0.8f
     );
 
+vec4 get_gamma_correction(vec4 colour) {
+    float gamma = 1.0f / 2.2f;
+
+    vec3 gamma_colour = pow(colour.rgb, vec3(gamma));
+
+    return vec4(gamma_colour, colour.a);
+}
+
 void main() {
     float face_shade = face_shades[f_face_index];
 
     vec4 colour = texture(u_block_texture_array, vec3(f_uv, float(f_texture_id)));
+
+    // colour = get_gamma_correction(colour);
 
     // vec4 w_colour = vec4(1.0f);
     // o_colour = vec4(f_colour, 1.0f);

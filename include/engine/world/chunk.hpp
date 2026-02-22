@@ -82,12 +82,12 @@ class Chunk {
             {{-1,  1,  0}, { 0,  1, -1}, {-1,  1, -1}},
         },
 
-        // TODO: Bottom
+        // Bottom
         {
-            {{-1,  1,  0}, { 0,  1,  1}, {-1,  1,  1}},
-            {{ 1,  1,  0}, { 0,  1,  1}, { 1,  1,  1}},
-            {{ 1,  1,  0}, { 0,  1, -1}, { 1,  1, -1}},
-            {{-1,  1,  0}, { 0,  1, -1}, {-1,  1, -1}},
+            {{ 1, -1,  0}, { 0, -1,  1}, { 1, -1,  1}},
+            {{-1, -1,  0}, { 0, -1,  1}, {-1, -1,  1}},
+            {{-1, -1,  0}, { 0, -1, -1}, {-1, -1, -1}},
+            {{ 1, -1,  0}, { 0, -1, -1}, { 1, -1, -1}},
         },
 
         // Right
@@ -141,6 +141,8 @@ class Chunk {
     std::atomic<std::uint8_t> _dirty_borders_mask;
 
     int get_block_id(int x, int y, int z);
+
+    void propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
 
     /**
      * @brief Culls a face of @p block based on the presence and type of an adjacent block (@p adjacent_block).
