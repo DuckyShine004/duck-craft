@@ -20,12 +20,18 @@ class Block {
 
     bool is_face_active(const engine::world::FaceType &type);
 
+    void set_sunlight(std::uint8_t sunlight);
+
+    std::uint8_t get_sunlight();
+
   private:
     static inline constexpr std::uint8_t _ALL_FACES = (1U << 6) - 1;
 
     engine::world::BlockType _type;
 
     std::uint8_t _face_mask;
+
+    std::uint8_t _sunlight;
 };
 
 } // namespace engine::world

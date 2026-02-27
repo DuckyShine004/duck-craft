@@ -95,6 +95,8 @@ void ChunkManager::generate_chunk(const glm::vec3 &position) {
             adjacent_chunk->set_dirty_border_state(opposite_face_type_index, true);
         }
 
+        chunk->propagate_sunlight(this->_chunks, *height_map);
+
         chunk->set_state(ChunkState::OCCLUDING_FACES);
 
         chunk->occlude_faces(this->_chunks);
@@ -131,6 +133,12 @@ void ChunkManager::process_chunks() {
                 }
 
                 this->_thread_pool->push([this, chunk]() {
+                    glm::ivec2 height_map_id(chunk->local_x, chunk->local_z);
+
+                    HeightMap *height_map = this->_height_maps.at(height_map_id).get();
+
+                    chunk->propagate_sunlight(this->_chunks, *height_map);
+
                     chunk->occlude_dirty_borders(this->_chunks);
 
                     if (!chunk->has_dirty_borders()) {

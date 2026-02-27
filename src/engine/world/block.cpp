@@ -2,7 +2,7 @@
 
 namespace engine::world {
 
-Block::Block() : _type(BlockType::EMPTY), _face_mask(this->_ALL_FACES) {
+Block::Block() : _type(BlockType::EMPTY), _face_mask(this->_ALL_FACES), _sunlight(0U) {
 }
 
 void Block::set_type(const BlockType &type) {
@@ -31,6 +31,14 @@ void Block::set_face_state(int face_type_index, bool state) {
     } else {
         this->_face_mask &= ~(1U << face_type_index);
     }
+}
+
+void Block::set_sunlight(std::uint8_t sunlight) {
+    this->_sunlight = sunlight;
+}
+
+std::uint8_t Block::get_sunlight() {
+    return this->_sunlight;
 }
 
 } // namespace engine::world

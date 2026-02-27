@@ -10,6 +10,7 @@ struct Vertex {
     glm::vec2 uv;
 
     std::uint8_t ambient_occlusion_state;
+    std::uint8_t sunlight;
 
     std::uint16_t texture_id;
 

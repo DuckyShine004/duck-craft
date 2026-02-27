@@ -8,8 +8,10 @@ in vec2 f_uv;
 in vec3 f_colour;
 
 in float f_ambient_occlusion;
+in float f_sunlight;
 
 flat in uint f_texture_id;
+
 flat in uint f_face_index;
 
 uniform sampler2DArray u_block_texture_array;
@@ -41,5 +43,6 @@ void main() {
     // o_colour = vec4(f_colour, 1.0f);
     // o_colour = vec4(w_colour.rgb * face_shade, w_colour.a);
     // o_colour = vec4(w_colour.rgb * f_ambient_occlusion * face_shade, w_colour.a);
-    o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
+    // o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
+    o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
 }

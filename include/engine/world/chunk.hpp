@@ -42,12 +42,15 @@ class Chunk {
 
     void occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
 
+    void propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, engine::world::HeightMap &height_map);
+
     void upload_mesh();
 
     void render(engine::shader::Shader &shader);
 
     engine::world::Block &get_block(int x, int y, int z);
     engine::world::Block &get_block(glm::ivec3 &position);
+    engine::world::Block &get_block(int index);
 
     engine::world::ChunkState get_state();
 
@@ -142,7 +145,9 @@ class Chunk {
 
     int get_block_id(int x, int y, int z);
 
-    void propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
+    engine::world::Chunk *get_global_chunk(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, int global_x, int global_y, int global_z);
+
+    engine::world::Block *get_global_block(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, int global_x, int global_y, int global_z);
 
     /**
      * @brief Culls a face of @p block based on the presence and type of an adjacent block (@p adjacent_block).

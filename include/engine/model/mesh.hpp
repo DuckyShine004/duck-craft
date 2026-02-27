@@ -88,7 +88,8 @@ class Mesh {
     static inline constexpr unsigned int _NORMAL_ATTRIBUTE = 1;
     static inline constexpr unsigned int _UV_ATTRIBUTE = 2;
     static inline constexpr unsigned int _AMBIENT_OCCLUSION_STATE_ATTRIBUTE = 3;
-    static inline constexpr unsigned int _TEXTURE_ID_ATTRIBUTE = 4;
+    static inline constexpr unsigned int _SUNLIGHT_ATTRIBUTE = 4;
+    static inline constexpr unsigned int _TEXTURE_ID_ATTRIBUTE = 5;
 
     GLuint _vao;
     GLuint _vbo;

@@ -5,7 +5,9 @@ layout(location = 1) in vec3 v_normal;
 layout(location = 2) in vec2 v_uv;
 
 layout(location = 3) in uint v_ambient_occlusion_state;
-layout(location = 4) in uint v_texture_id;
+layout(location = 4) in uint v_sunlight;
+
+layout(location = 5) in uint v_texture_id;
 
 uniform mat4 u_model;
 uniform mat4 u_view;
@@ -21,8 +23,10 @@ out vec2 f_uv;
 out vec3 f_colour;
 
 out float f_ambient_occlusion;
+out float f_sunlight;
 
 flat out uint f_texture_id;
+
 flat out uint f_face_index;
 
 // PERF: Should probably pass face index to vertex shader
@@ -68,10 +72,12 @@ void main() {
 
     f_colour = u_colour;
 
-    f_texture_id = v_texture_id;
     f_face_index = get_face_index(v_normal);
 
     f_ambient_occlusion = ambient_occlusion[int(v_ambient_occlusion_state)];
+    f_sunlight = float(max(v_sunlight, 1U)) / 15.0f;
+
+    f_texture_id = v_texture_id;
 
     gl_Position = u_projection * u_view * world_space;
 }

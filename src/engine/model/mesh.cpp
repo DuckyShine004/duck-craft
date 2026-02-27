@@ -45,7 +45,10 @@ void Mesh::upload() {
         glEnableVertexAttribArray(this->_POSITION_ATTRIBUTE);
         glEnableVertexAttribArray(this->_NORMAL_ATTRIBUTE);
         glEnableVertexAttribArray(this->_UV_ATTRIBUTE);
+
         glEnableVertexAttribArray(this->_AMBIENT_OCCLUSION_STATE_ATTRIBUTE);
+        glEnableVertexAttribArray(this->_SUNLIGHT_ATTRIBUTE);
+
         glEnableVertexAttribArray(this->_TEXTURE_ID_ATTRIBUTE);
 
         glVertexAttribPointer(this->_POSITION_ATTRIBUTE, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position));
@@ -53,6 +56,8 @@ void Mesh::upload() {
         glVertexAttribPointer(this->_UV_ATTRIBUTE, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
 
         glVertexAttribIPointer(this->_AMBIENT_OCCLUSION_STATE_ATTRIBUTE, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void *)offsetof(Vertex, ambient_occlusion_state));
+        glVertexAttribIPointer(this->_SUNLIGHT_ATTRIBUTE, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void *)offsetof(Vertex, sunlight));
+
         glVertexAttribIPointer(this->_TEXTURE_ID_ATTRIBUTE, 1, GL_UNSIGNED_SHORT, sizeof(Vertex), (void *)offsetof(Vertex, texture_id));
 
         glBindVertexArray(0);
