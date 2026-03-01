@@ -46,11 +46,7 @@ void Chunk::generate(Generator &generator, HeightMap &height_map) {
                 int dy = this->global_y + y;
                 int dz = this->global_z + z;
 
-                float threshold = generator.get_cave_noise(dx, dy, dz);
-
-                // LOG_INFO("Threshold: {}", threshold);
-
-                if (threshold <= 0.1f || threshold >= 0.9f) {
+                if (generator.is_cave(dx, dy, dz)) {
                     continue;
                 }
 
@@ -125,8 +121,7 @@ void Chunk::propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3,
     }
 
     while (!queue.empty()) {
-        LightNode node = queue.front();
-        queue.pop();
+        LightNode &node = queue.front();
 
         int index = node.index;
 
@@ -137,6 +132,8 @@ void Chunk::propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3,
         int z = (index >> 10) & (config::CHUNK_SIZE - 1);
 
         int sunlight = chunk->get_block(index).get_sunlight();
+
+        queue.pop();
 
         if (sunlight == 0U) {
             continue;
@@ -208,9 +205,7 @@ void Chunk::generate_mesh(boost::unordered::concurrent_flat_map<glm::ivec3, std:
     int index_offset = 0;
 
     for (Face &face : this->_faces) {
-        face.add_to_mesh(this->_mesh);
-
-        face.add_indices(this->_mesh, index_offset);
+        face.add_to_mesh(this->_mesh, index_offset);
 
         index_offset += 4;
     }
@@ -247,8 +242,6 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
         std::uint32_t block_masks[config::CHUNK_SIZE];
 
         std::uint8_t ambient_occlusion_masks[config::CHUNK_SIZE][config::CHUNK_SIZE];
-
-        // std::uint16_t sunlight_masks[config::CHUNK_SIZE][config::CHUNK_SIZE];
 
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             block_masks[y] = 0U;
@@ -328,6 +321,8 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                     for (int dx = x; dx < x + width; ++dx) {
                         if (ambient_occlusion_masks[y + height][dx] != ambient_occlusion_mask) {
                             can_merge = false;
+
+                            break;
                         }
 
                         std::uint8_t adjacent_sunlight = 0U;
@@ -344,9 +339,7 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 
                         if (adjacent_sunlight != sunlight) {
                             can_merge = false;
-                        }
 
-                        if (!can_merge) {
                             break;
                         }
                     }
@@ -468,6 +461,8 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                     for (int dx = x; dx < x + width; ++dx) {
                         if (ambient_occlusion_masks[z + depth][dx] != ambient_occlusion_mask) {
                             can_merge = false;
+
+                            break;
                         }
 
                         std::uint8_t adjacent_sunlight = 0U;
@@ -484,9 +479,7 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 
                         if (adjacent_sunlight != sunlight) {
                             can_merge = false;
-                        }
 
-                        if (!can_merge) {
                             break;
                         }
                     }
@@ -509,7 +502,6 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
                     face.set_ambient_occlusion_state(vertex_index, ambient_occlusion_mask);
 
-                    // face.vertices[vertex_index].sunlight = 15.0f;
                     face.vertices[vertex_index].sunlight = sunlight;
                 }
 
@@ -609,6 +601,8 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                     for (int dy = y; dy < y + height; ++dy) {
                         if (ambient_occlusion_masks[z + depth][dy] != ambient_occlusion_mask) {
                             can_merge = false;
+
+                            break;
                         }
 
                         std::uint8_t adjacent_sunlight = 0U;
@@ -625,9 +619,7 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 
                         if (adjacent_sunlight != sunlight) {
                             can_merge = false;
-                        }
 
-                        if (!can_merge) {
                             break;
                         }
                     }

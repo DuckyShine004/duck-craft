@@ -1,9 +1,12 @@
-#include "utility/file_utility.hpp"
-
 #include <stack>
 #include <sstream>
 #include <fstream>
 #include <filesystem>
+
+#include "utility/file_utility.hpp"
+#include "utility/string_utility.hpp"
+
+#include "logger/logger_macros.hpp"
 
 namespace utility {
 
@@ -11,12 +14,15 @@ std::string FileUtility::get_file_to_string(const std::string &filename) {
     std::ifstream file(filename, std::ios::binary);
 
     if (!file.is_open()) {
-        return "";
+        LOG_ERROR("File '{}' could not be opened", filename);
+        std::terminate();
     }
 
     std::stringstream buffer;
 
     buffer << file.rdbuf();
+
+    file.close();
 
     return buffer.str();
 }
@@ -37,12 +43,53 @@ std::string FileUtility::get_basename_from_path(const std::string &path) {
     return basename;
 }
 
+std::string FileUtility::get_extension_from_path(const std::string &path) {
+    std::filesystem::path full_path(path);
+
+    std::string extension = full_path.extension();
+
+    return extension;
+}
+
 std::string FileUtility::get_parent_directory(const std::string &path) {
     std::filesystem::path full_path(path);
 
     std::string parent_directory = full_path.parent_path().string();
 
     return parent_directory;
+}
+
+std::string FileUtility::get_shader_file(const std::string &path) {
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file.is_open()) {
+        LOG_ERROR("File '{}' could not be opened", path);
+        std::terminate();
+    }
+
+    std::string token;
+
+    std::stringstream buffer;
+
+    while (std::getline(file, token)) {
+        if (token.starts_with("#include")) {
+            std::string include_path_raw = StringUtility::split_string(token, ' ')[1];
+
+            std::string include_path = StringUtility::slice_string(include_path_raw, 1, include_path_raw.length() - 2);
+
+            std::string include_source = FileUtility::get_file_to_string(include_path);
+
+            buffer << include_source << '\n';
+        } else {
+            buffer << token << '\n';
+        }
+    }
+
+    LOG_INFO("Buffer: {}", buffer.str());
+
+    file.close();
+
+    return buffer.str();
 }
 
 bool FileUtility::path_exists(const std::string &path) {
@@ -77,7 +124,7 @@ void FileUtility::save_json(const nlohmann::json &json, const std::string &path)
     file << std::setw(2) << json;
 }
 
-// Assume starts with name/
+// NOTE: Assume starts with name/
 std::vector<std::string> FileUtility::get_files_in_directory(std::string directory) {
     std::vector<std::string> files;
 

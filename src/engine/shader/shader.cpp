@@ -39,8 +39,8 @@ void Shader::detach() {
 }
 
 void Shader::create_shaders() {
-    std::string vertex_shader_source = FileUtility::get_file_to_string(this->_vertex_shader_path);
-    std::string fragment_shader_source = FileUtility::get_file_to_string(this->_fragment_shader_path);
+    std::string vertex_shader_source = FileUtility::get_shader_file(this->_vertex_shader_path);
+    std::string fragment_shader_source = FileUtility::get_shader_file(this->_fragment_shader_path);
 
     const char *vertex_shader_code = vertex_shader_source.c_str();
     const char *fragment_shader_code = fragment_shader_source.c_str();

@@ -14,7 +14,11 @@ class FileUtility {
 
     static std::string get_basename_from_path(const std::string &path);
 
+    static std::string get_extension_from_path(const std::string &path);
+
     static std::string get_parent_directory(const std::string &path);
+
+    static std::string get_shader_file(const std::string &path);
 
     static bool path_exists(const std::string &path);
 

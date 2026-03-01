@@ -26,6 +26,8 @@ class ShaderManager final : public Manager {
     static inline constexpr const char *_VERTEX_SHADER_EXTENSION = ".vert";
     static inline constexpr const char *_FRAGMENT_SHADER_EXTENSION = ".frag";
 
+    static inline constexpr const char *_INCLUDE_EXTENSION = ".glsl";
+
     std::unordered_map<std::string, std::unique_ptr<engine::shader::Shader>> _shaders;
 
     engine::shader::Shader *_shader;

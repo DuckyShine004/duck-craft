@@ -3,6 +3,7 @@
 #include "utility/file_utility.hpp"
 
 #include "logger/logger_macros.hpp"
+#include "utility/string_utility.hpp"
 
 using namespace engine::shader;
 
@@ -63,7 +64,14 @@ Shader &ShaderManager::get_active_shader() {
 }
 
 void ShaderManager::add_shader(const std::string &path) {
+    std::string extension = FileUtility::get_extension_from_path(path);
     std::string basename = FileUtility::get_basename_from_path(path);
+
+    if (extension == this->_INCLUDE_EXTENSION) {
+        LOG_INFO("Skipping include file '{}'", path);
+        return;
+    }
+
     std::string parent_directory = FileUtility::get_parent_directory(path);
     std::string shader_path = parent_directory + '/' + basename;
 
