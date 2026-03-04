@@ -122,9 +122,9 @@ void Application::update(Engine &engine) {
 }
 
 void Application::render(Engine &engine) {
-    const float R = 50.0f / 255.0f;
-    const float G = 51.0f / 255.0f;
-    const float B = 76.0f / 255.0f;
+    const float R = 0.5f;
+    const float G = 0.7f;
+    const float B = 1.0f;
 
     glClearColor(R, G, B, 0.0f);
 

@@ -90,7 +90,6 @@ void Engine::render() {
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glCullFace(GL_BACK);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     Shader &scene = shader_manager.get_shader("scene");
@@ -103,6 +102,7 @@ void Engine::render() {
     glBindTexture(GL_TEXTURE_2D_ARRAY, texture_manager.get_texture_handle("blocks"));
 
     current_camera->upload_model_view_projection(scene);
+    current_camera->upload_position(scene);
 
     chunk_manager.render(scene);
 

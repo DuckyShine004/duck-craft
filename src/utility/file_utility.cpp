@@ -2,6 +2,7 @@
 #include <sstream>
 #include <fstream>
 #include <filesystem>
+#include <unordered_set>
 
 #include "utility/file_utility.hpp"
 #include "utility/string_utility.hpp"
@@ -59,7 +60,10 @@ std::string FileUtility::get_parent_directory(const std::string &path) {
     return parent_directory;
 }
 
+// WARN: WE ASSUME THAT ONLY COMPUTE SHADER FILES CAN ONLY HAVE INCLUDES, SETTING UP PRAGMA WOULD BE TRICKY
 std::string FileUtility::get_shader_file(const std::string &path) {
+    LOG_INFO("Parsing shader file '{}'", path);
+
     std::ifstream file(path, std::ios::binary);
 
     if (!file.is_open()) {
@@ -71,13 +75,26 @@ std::string FileUtility::get_shader_file(const std::string &path) {
 
     std::stringstream buffer;
 
+    std::unordered_set<std::string> includes;
+
+    int line = 0;
+
     while (std::getline(file, token)) {
+        ++line;
+
         if (token.starts_with("#include")) {
             std::string include_path_raw = StringUtility::split_string(token, ' ')[1];
 
             std::string include_path = StringUtility::slice_string(include_path_raw, 1, include_path_raw.length() - 2);
 
+            if (includes.find(include_path) != includes.end()) {
+                LOG_WARN("Skipping include '{}' at line {}", include_path, line);
+                continue;
+            }
+
             std::string include_source = FileUtility::get_file_to_string(include_path);
+
+            includes.insert(include_path);
 
             buffer << include_source << '\n';
         } else {

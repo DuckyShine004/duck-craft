@@ -18,6 +18,8 @@ flat in uint f_face_index;
 
 uniform sampler2DArray u_block_texture_array;
 
+uniform vec3 u_camera_position;
+
 out vec4 o_colour;
 
 const float face_shades[6] = float[6](
@@ -25,6 +27,17 @@ const float face_shades[6] = float[6](
         0.5f, 0.8f,
         0.5f, 0.8f
     );
+
+float compute_fog(vec3 fragment_position, vec3 camera_position) {
+    const float FOG_START = 10.0f;
+    const float FOG_END = 50.0f;
+
+    float distance = length(fragment_position - camera_position);
+
+    float fog_factor = (FOG_END - distance) / (FOG_END - FOG_START);
+
+    return clamp(fog_factor, 0.0f, 1.0f);
+}
 
 vec4 get_gamma_correction(vec4 colour) {
     float gamma = 1.0f / 2.2f;
@@ -69,8 +82,24 @@ void main() {
     // INFO: Sharpness
 
     // INFO: Without lightmap
-    o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
+    // colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
 
-    // INFO: Render actual fragment here
-    // o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
+    // INFO: Final fragment
+    colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
+
+    // INFO: Fog
+    // vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
+    //
+    // float fog = compute_fog(f_fragment_position, u_camera_position);
+    //
+    // colour = vec4(mix(fog_colour, colour.rgb, fog), colour.a);
+
+    // INFO: Volumetric Fog
+    vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
+
+    vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
+
+    colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
+
+    o_colour = colour;
 }

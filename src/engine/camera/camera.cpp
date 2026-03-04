@@ -75,7 +75,7 @@ void Camera::upload_model_view_projection(Shader &shader) {
 }
 
 void Camera::upload_position(Shader &shader) {
-    shader.set_vector3f("u_view_position", this->transform.position);
+    shader.set_vector3f("u_camera_position", this->transform.position);
 }
 
 void Camera::move(Direction direction, float delta_time) {

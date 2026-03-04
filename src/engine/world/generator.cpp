@@ -14,12 +14,12 @@ void Generator::initialise_height_noise() {
     FastNoise::SmartNode<FastNoise::Simplex> simplex = FastNoise::New<FastNoise::Simplex>();
 
     // 1 / 0.01(s) = f
-    float scale = 200.0f;
+    float scale = 100.0f;
 
     simplex->SetScale(scale);
 
     float min_height = 0.0f;
-    float max_height = 128.0f;
+    float max_height = 64.0f;
 
     simplex->SetOutputMin(min_height);
     simplex->SetOutputMax(max_height);
@@ -66,6 +66,7 @@ void Generator::initialise_cave_noise() {
     auto warp = FastNoise::New<FastNoise::DomainWarpGradient>();
     warp->SetWarpAmplitude(60.0f);
     warp->SetScale(150.0f);
+    // warp->SetScale(150.0f);
 
     // Warp uses cave density as its Source (i.e., sample caveFbm at warped coords)
     warp->SetSource(caveFbm);
