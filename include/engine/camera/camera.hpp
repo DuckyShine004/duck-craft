@@ -33,6 +33,8 @@ class Camera {
 
     void update_projection();
 
+    void upload_inverse_view_projection(engine::shader::Shader &shader);
+
     void upload_view_projection(engine::shader::Shader &shader);
 
     void upload_model_view_projection(engine::shader::Shader &shader);

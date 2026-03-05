@@ -21,7 +21,7 @@ class Quad {
 
     engine::model::Mesh &get_mesh();
 
-    void render(shader::Shader &shader);
+    void render(engine::shader::Shader &shader);
 
   private:
     // clang-format off

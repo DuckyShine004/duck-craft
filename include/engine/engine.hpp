@@ -2,6 +2,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include "engine/world/sky.hpp"
+
 #include "engine/threading/thread_pool.hpp"
 
 namespace engine {
@@ -16,6 +18,8 @@ class Engine {
 
   private:
     float _time;
+
+    std::unique_ptr<engine::world::Sky> _sky;
 
     engine::threading::ThreadPool _thread_pool;
 };

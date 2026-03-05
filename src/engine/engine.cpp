@@ -14,6 +14,8 @@
 
 #include "logger/logger_macros.hpp"
 
+using namespace engine::world;
+
 using namespace engine::shader;
 
 using namespace engine::entity;
@@ -27,6 +29,8 @@ using namespace common;
 namespace engine {
 
 void Engine::initialise() {
+    this->_sky = std::make_unique<Sky>();
+
     ChunkManager &chunk_manager = ChunkManager::get_instance();
 
     CameraManager &camera_manager = CameraManager::get_instance();
@@ -80,6 +84,10 @@ void Engine::render() {
     ChunkManager &chunk_manager = ChunkManager::get_instance();
     CameraManager &camera_manager = CameraManager::get_instance();
     TextureManager &texture_manager = TextureManager::get_instance();
+    DisplayManager &display_manager = DisplayManager::get_instance();
+
+    float display_width = display_manager.get_width();
+    float display_height = display_manager.get_height();
 
     Camera *current_camera = camera_manager.get_camera();
 
@@ -87,10 +95,28 @@ void Engine::render() {
 
     ShaderManager &shader_manager = ShaderManager::get_instance();
 
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
+    /* NOTE: Render sky */
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
     glCullFace(GL_BACK);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    Shader &sky = shader_manager.get_shader("sky");
+
+    sky.use();
+
+    sky.set_vector2f("u_resolution", display_width, display_height);
+
+    current_camera->upload_inverse_view_projection(sky);
+
+    this->_sky->render(sky);
+
+    /* NOTE: Render voxels */
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glCullFace(GL_BACK);
 
     Shader &scene = shader_manager.get_shader("scene");
 
@@ -106,6 +132,7 @@ void Engine::render() {
 
     chunk_manager.render(scene);
 
+    /* DEBUG: Render camera frustum */
     glDisable(GL_CULL_FACE);
 
     for (Camera *camera : camera_manager.get_cameras()) {

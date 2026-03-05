@@ -64,6 +64,12 @@ float compute_light_visibility(vec3 ray_position) {
  * every fragment is equally lit, even though that is not the case.
  */
 vec4 compute_volumetric_fog(vec3 fragment_position, vec3 camera_position) {
+    /* Absorption coefficient */
+    const float SIGMA_A = 0.02f;
+
+    /* Scattering coefficient */
+    const float SIGMA_S = 0.04f;
+
     vec3 ray_direction = normalize(fragment_position - camera_position);
 
     float ray_length = length(fragment_position - camera_position);
@@ -75,12 +81,6 @@ vec4 compute_volumetric_fog(vec3 fragment_position, vec3 camera_position) {
     vec3 fog_colour = vec3(0.0f);
 
     float total_transmittance = 1.0f;
-
-    /* Absorption coefficient */
-    const float SIGMA_A = 0.02f;
-
-    /* Scattering coefficient */
-    const float SIGMA_S = 0.04f;
 
     /* NOTE: We use light colour = white for now... */
     vec3 light_colour = vec3(1.0f);

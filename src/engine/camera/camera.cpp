@@ -63,6 +63,21 @@ void Camera::update(GLFWwindow *window, float delta_time) {
     }
 }
 
+void Camera::upload_inverse_view_projection(Shader &shader) {
+    shader.set_matrix4fv("u_inverse_view", glm::inverse(this->_MVP_component.view));
+    shader.set_matrix4fv("u_inverse_projection", glm::inverse(this->_MVP_component.projection));
+    // glm::mat4 view = this->_MVP_component.view;
+    //
+    // glm::mat3 view_rot = glm::mat3(view);
+    // glm::mat4 view_no_translation = glm::mat4(view_rot);
+    //
+    // glm::mat4 inv_view = glm::inverse(view_no_translation);
+    // glm::mat4 inv_proj = glm::inverse(this->_MVP_component.projection);
+    //
+    // shader.set_matrix4fv("u_inverse_view", inv_view);
+    // shader.set_matrix4fv("u_inverse_projection", inv_proj);
+}
+
 void Camera::upload_view_projection(Shader &shader) {
     shader.set_matrix4fv("u_view", this->_MVP_component.view);
     shader.set_matrix4fv("u_projection", this->_MVP_component.projection);
