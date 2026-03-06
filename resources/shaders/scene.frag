@@ -39,6 +39,14 @@ float compute_fog(vec3 fragment_position, vec3 camera_position) {
     return clamp(fog_factor, 0.0f, 1.0f);
 }
 
+vec4 compute_saturation(vec4 colour) {
+    const float SATURATION = 1.2f;
+
+    float luminance = colour.r * 0.2125f + colour.g * 0.7153f + colour.b * 0.07121f;
+
+    return vec4(mix(vec3(luminance), colour.rgb, SATURATION), colour.a);
+}
+
 vec4 get_gamma_correction(vec4 colour) {
     float gamma = 1.0f / 2.2f;
 
@@ -52,8 +60,6 @@ void main() {
 
     vec4 colour = texture(u_block_texture_array, vec3(f_uv, float(f_texture_id)));
 
-    // colour = get_gamma_correction(colour);
-
     // vec4 w_colour = vec4(1.0f);
     // o_colour = vec4(f_colour, 1.0f);
     // o_colour = vec4(w_colour.rgb * face_shade, w_colour.a);
@@ -65,19 +71,6 @@ void main() {
     // o_colour = vec4(0.0f, t_colour.g * face_shade * f_sunlight, 0.0f, t_colour.a);
 
     // o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
-
-    // float brightness = face_shade * f_sunlight;
-    //
-    // vec3 constrast = vec3(0.1f);
-    //
-    // colour = vec4(constrast * (colour.rgb - vec3(0.5f)) + vec3(0.5f) + vec3(brightness), colour.a);
-
-    // INFO: Saturation
-    // float luminance = colour.r * 0.2125f + colour.g * 0.7153f + colour.b * 0.07121f;
-    //
-    // float saturation = 100.0f;
-    //
-    // colour = vec4(mix(vec3(luminance), colour.rgb, saturation), colour.a);
 
     // INFO: Sharpness
 
@@ -94,12 +87,25 @@ void main() {
     //
     // colour = vec4(mix(fog_colour, colour.rgb, fog), colour.a);
 
-    // INFO: Volumetric Fog
+    /* INFO: Constrast */
+    // float brightness = face_shade * f_sunlight;
+    //
+    // vec3 constrast = vec3(0.1f);
+    //
+    // colour = vec4(constrast * (colour.rgb - vec3(0.5f)) + vec3(0.5f) + vec3(brightness), colour.a);
+
+    /* INFO: Saturation */
+    colour = compute_saturation(colour);
+
+    /* INFO: Volumetric Fog */
     vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
 
     vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
 
     colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
+
+    /* INFO: Gamma Correction */
+    // colour = get_gamma_correction(colour);
 
     o_colour = colour;
 }

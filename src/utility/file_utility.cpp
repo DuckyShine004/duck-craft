@@ -102,7 +102,7 @@ std::string FileUtility::get_shader_file(const std::string &path) {
         }
     }
 
-    LOG_INFO("Buffer: {}", buffer.str());
+    LOG_DEBUG("Buffer: {}", buffer.str());
 
     file.close();
 

@@ -29,7 +29,10 @@ using namespace common;
 namespace engine {
 
 void Engine::initialise() {
+    this->_time = 0.0f;
+
     this->_sky = std::make_unique<Sky>();
+    this->_cloud = std::make_unique<Cloud>();
 
     ChunkManager &chunk_manager = ChunkManager::get_instance();
 
@@ -77,7 +80,11 @@ void Engine::update(GLFWwindow *window, float delta_time) {
 
     camera->update(window, delta_time);
 
+    this->_cloud->update(camera->transform.position);
+
     chunk_manager.process_chunks();
+
+    this->_time += delta_time;
 }
 
 void Engine::render() {
@@ -98,6 +105,7 @@ void Engine::render() {
     /* NOTE: Render sky */
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
     glDepthMask(GL_FALSE);
     glCullFace(GL_BACK);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -125,23 +133,48 @@ void Engine::render() {
     scene.set_integer("u_block_texture_array", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texture_manager.get_texture_handle("blocks"));
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texture_manager.get_texture_handle("block"));
 
     current_camera->upload_model_view_projection(scene);
     current_camera->upload_position(scene);
 
     chunk_manager.render(scene);
 
-    /* DEBUG: Render camera frustum */
+    /* NOTE: Render clouds */
     glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    for (Camera *camera : camera_manager.get_cameras()) {
-        if (camera == current_camera) {
-            continue;
-        }
+    Shader &cloud = shader_manager.get_shader("cloud");
 
-        camera->get_frustum().render(scene);
-    }
+    cloud.use();
+
+    cloud.set_float("u_time", this->_time);
+
+    cloud.set_integer("u_cloud_texture_array", 1);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texture_manager.get_texture_handle("environment"));
+
+    current_camera->upload_model_view_projection(cloud);
+    current_camera->upload_position(cloud);
+
+    this->_cloud->render(cloud);
+
+    /* DEBUG: Render camera frustum */
+    // glDisable(GL_CULL_FACE);
+    //
+    // Shader &debug = shader_manager.get_shader("debug");
+    //
+    // for (Camera *camera : camera_manager.get_cameras()) {
+    //     if (camera == current_camera) {
+    //         continue;
+    //     }
+    //
+    //     camera->get_frustum().render(scene);
+    // }
 }
 
 } // namespace engine

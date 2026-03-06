@@ -34,6 +34,7 @@ void TextureManager::initialise() {
     stbi_set_flip_vertically_on_load(true);
 
     this->load_block_textures();
+    this->load_environment_textures();
 }
 
 GLuint TextureManager::get_texture_handle(const std::string &handle_name) {
@@ -46,21 +47,13 @@ GLuint TextureManager::get_texture_handle(const std::string &handle_name) {
     return iterator->second;
 }
 
-GLuint TextureManager::generate_texture_handle(const std::string &handle_name) {
+GLuint TextureManager::generate_texture_array_and_get_id(const std::string &handle_name, int width, int height, int layers) {
     GLuint texture_id;
 
     glGenTextures(1, &texture_id);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texture_id);
 
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    const int layers = static_cast<int>(BlockType::COUNT) * 6;
-
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, 16, 16, layers, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, width, height, layers, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     this->_texture_handles[handle_name] = texture_id;
 
@@ -83,15 +76,26 @@ void TextureManager::load_texture(std::string &texture_path, int texture_index, 
 
     glBindTexture(GL_TEXTURE_2D_ARRAY, texture_handle);
 
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
     glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, texture_index, width, height, 1, GL_RGBA, GL_UNSIGNED_BYTE, data);
 
     stbi_image_free(data);
 }
 
 void TextureManager::load_block_textures() {
-    GLuint texture_handle = this->generate_texture_handle("blocks");
+    const int WIDTH = 16;
+    const int HEIGHT = 16;
 
-    std::string directory = std::string(this->_PARENT_DIRECTORY) + "blocks";
+    const int LAYERS = static_cast<int>(BlockType::COUNT) * 6;
+
+    GLuint texture_handle = this->generate_texture_array_and_get_id("block", WIDTH, HEIGHT, LAYERS);
+
+    std::string directory = std::string(this->_PARENT_DIRECTORY) + "block";
 
     std::vector<std::string> block_directories = FileUtility::get_paths_in_directory(directory);
 
@@ -137,6 +141,27 @@ void TextureManager::load_block_textures() {
 
             ++layer;
         }
+    }
+}
+
+void TextureManager::load_environment_textures() {
+    const int WIDTH = 256;
+    const int HEIGHT = 256;
+
+    const int LAYERS = 1;
+
+    GLuint texture_handle = this->generate_texture_array_and_get_id("environment", WIDTH, HEIGHT, LAYERS);
+
+    std::string directory = std::string(this->_PARENT_DIRECTORY) + "environment";
+
+    std::vector<std::string> environment_paths = FileUtility::get_paths_in_directory(directory);
+
+    int layer = 0;
+
+    for (std::string &environment_path : environment_paths) {
+        this->load_texture(environment_path, layer, texture_handle);
+
+        ++layer;
     }
 }
 

@@ -26,11 +26,13 @@ class TextureManager final : public Manager {
 
     ~TextureManager();
 
-    GLuint generate_texture_handle(const std::string &handle_name);
+    GLuint generate_texture_array_and_get_id(const std::string &handle_name, int width, int height, int layers);
 
     void load_texture(std::string &texture_path, int texture_index, GLuint texture_handle);
 
     void load_block_textures();
+
+    void load_environment_textures();
 
     void sort_block_directory_by_type();
 };

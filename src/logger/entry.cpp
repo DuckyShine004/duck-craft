@@ -45,6 +45,8 @@ std::string Entry::to_string() {
 
     oss << "  " << this->_message;
 
+    oss << '\n';
+
     return oss.str();
 }
 

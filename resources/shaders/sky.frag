@@ -27,5 +27,5 @@ void main() {
 
     vec3 sky = mix(horizon, zenith, pow(h, 1.5));
 
-    o_colour = vec4(sky, 1.0);
+    o_colour = vec4(sky, 1.0f);
 }

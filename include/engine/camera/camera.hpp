@@ -61,7 +61,9 @@ class Camera {
     static inline constexpr std::pair<float, float> _FIELD_OF_VIEW_LIMITS = {1.0f, 90.0f};
 
     static inline constexpr float _NEAR = 0.1f;
-    static inline constexpr float _FAR = 100.0f;
+
+    /* TODO: Should adjust based on chunk render distance */
+    static inline constexpr float _FAR = 1024.0f;
 
     static inline constexpr float _PITCH_LIMIT = 89.0f;
     static inline constexpr float _SENSITIVITY = 0.025f;
