@@ -36,7 +36,7 @@ vec4 compute_square_fade(vec4 colour, vec3 vertex_position) {
     const float QUAD_SIZE = 1024.0f;
 
     const float FADE_START = QUAD_SIZE * 0.25f;
-    const float FADE_END = QUAD_SIZE;
+    const float FADE_END = QUAD_SIZE * 0.75f;
 
     float distance = max(abs(vertex_position.x), abs(vertex_position.z));
 

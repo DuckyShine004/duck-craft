@@ -1,5 +1,6 @@
-#include "utility/math_utility.hpp"
 #include <random>
+
+#include "utility/math_utility.hpp"
 
 namespace utility {
 

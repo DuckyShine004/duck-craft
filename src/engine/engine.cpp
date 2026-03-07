@@ -5,6 +5,7 @@
 #include "engine/shader/shader.hpp"
 
 #include "manager/chunk_manager.hpp"
+#include "manager/sound_manager.hpp"
 #include "manager/camera_manager.hpp"
 #include "manager/shader_manager.hpp"
 #include "manager/display_manager.hpp"
@@ -63,10 +64,13 @@ void Engine::initialise() {
 }
 
 void Engine::update(GLFWwindow *window, float delta_time) {
-    CameraManager &camera_manager = CameraManager::get_instance();
     ChunkManager &chunk_manager = ChunkManager::get_instance();
+    SoundManager &sound_manager = SoundManager::get_instance();
+    CameraManager &camera_manager = CameraManager::get_instance();
 
     Camera *camera = camera_manager.get_camera();
+
+    sound_manager.play_music();
 
     // Camera *player_camera = camera_manager.get_camera("player");
     //

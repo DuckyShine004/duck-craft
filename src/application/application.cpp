@@ -7,6 +7,7 @@
 #include "engine/engine.hpp"
 
 #include "manager/chunk_manager.hpp"
+#include "manager/sound_manager.hpp"
 #include "manager/shader_manager.hpp"
 #include "manager/camera_manager.hpp"
 #include "manager/display_manager.hpp"
@@ -89,6 +90,7 @@ void Application::load() {
     glViewport(0, 0, width, height);
 
     ChunkManager::get_instance().initialise();
+    SoundManager::get_instance().initialise();
     ShaderManager::get_instance().initialise();
     CameraManager::get_instance().initialise();
     DisplayManager::get_instance().initialise();

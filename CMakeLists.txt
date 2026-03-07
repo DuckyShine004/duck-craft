@@ -22,14 +22,28 @@ find_package(TBB REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(FastNoise2 CONFIG REQUIRED)
 
+pkg_check_modules(OPENAL REQUIRED openal)
+pkg_check_modules(SNDFILE REQUIRED sndfile)
+
 add_executable(duck-craft ${DUCK_CRAFT_SOURCES})
 
 target_compile_definitions(duck-craft PRIVATE GLFW_INCLUDE_NONE)
 
-target_include_directories(duck-craft PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(
+  duck-craft PRIVATE ${OPENAL_INCLUDE_DIRS} ${SNDFILE_INCLUDE_DIRS}
+                     ${CMAKE_SOURCE_DIR}/include)
 
-target_link_libraries(duck-craft PRIVATE glfw fmt::fmt Boost::boost TBB::tbb
-                                         FastNoise2::FastNoise)
+find_library(OPENAL_FRAMEWORK OpenAL)
+
+target_link_libraries(
+  duck-craft
+  PRIVATE ${OPENAL_LDFLAGS}
+          ${SNDFILE_LDFLAGS}
+          glfw
+          fmt::fmt
+          Boost::boost
+          TBB::tbb
+          FastNoise2::FastNoise)
 
 target_compile_options(duck-craft PRIVATE $<$<CONFIG:Release>:-O3 -march=native
                                           -ffunction-sections -fdata-sections>)
