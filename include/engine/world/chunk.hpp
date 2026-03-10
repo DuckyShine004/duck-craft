@@ -2,17 +2,15 @@
 
 #include <memory>
 
-#include <boost/unordered/concurrent_flat_map.hpp>
-
 #include "engine/world/face.hpp"
 #include "engine/world/block.hpp"
 #include "engine/world/config.hpp"
-#include "engine/world/generator.hpp"
-#include "engine/world/height_map.hpp"
 #include "engine/world/chunk_state.hpp"
 
 #include "engine/model/mesh.hpp"
 #include "engine/model/topology.hpp"
+
+#include "engine/entity/aabb.hpp"
 
 #include "engine/math/hash/vector/ivec3.hpp"
 
@@ -21,6 +19,8 @@
 namespace engine::world {
 
 class Face;
+
+class World;
 
 class Chunk {
   public:
@@ -32,17 +32,19 @@ class Chunk {
     int local_y;
     int local_z;
 
+    engine::world::Chunk *neighbours[27];
+
     Chunk(int global_x, int global_y, int global_z);
 
-    void generate(engine::world::Generator &generator, engine::world::HeightMap &height_map);
+    void generate(engine::world::World &world);
 
-    void generate_mesh(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
+    void generate_mesh(engine::world::World &world);
 
-    void occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
+    void occlude_faces(engine::world::World &world);
 
-    void occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
+    void occlude_dirty_borders(engine::world::World &world);
 
-    void propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, engine::world::HeightMap &height_map);
+    void propagate_sunlight(engine::world::World &world);
 
     void upload_mesh();
 
@@ -53,6 +55,8 @@ class Chunk {
     engine::world::Block &get_block(int index);
 
     engine::world::ChunkState get_state();
+
+    engine::entity::AABB &get_aabb();
 
     void set_state(const engine::world::ChunkState &state);
 
@@ -133,6 +137,8 @@ class Chunk {
 
     engine::model::Mesh _mesh;
 
+    engine::entity::AABB _aabb;
+
     std::vector<engine::world::Face> _faces;
 
     std::atomic<engine::world::ChunkState> _state;
@@ -145,10 +151,6 @@ class Chunk {
 
     int get_block_id(int x, int y, int z);
 
-    engine::world::Chunk *get_global_chunk(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, int global_x, int global_y, int global_z);
-
-    engine::world::Block *get_global_block(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, int global_x, int global_y, int global_z);
-
     /**
      * @brief Culls a face of @p block based on the presence and type of an adjacent block (@p adjacent_block).
      *
@@ -158,21 +160,25 @@ class Chunk {
      */
     void cull_face_based_on_adjacent_block(engine::world::Block &block, engine::world::Block &adjacent_block, int face_type_index);
 
-    void merge_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
 
-    void merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
-    void merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
-    void merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_XY_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_XZ_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_YZ_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
 
     void add_face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
 
-    void occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks);
+    void occlude_border_faces(engine::world::World &world);
 
     void occlude_XY_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
     void occlude_XZ_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
     void occlude_YZ_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
 
-    int get_ambient_occlusion(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<engine::world::Chunk>, engine::math::hash::vector::IVec3Hash, engine::math::hash::vector::IVec3Equal> &chunks, int face_type_index, int vertex_index, int x, int y, int z);
+    int get_ambient_occlusion(engine::world::World &world, int face_type_index, int vertex_index, int x, int y, int z);
+
+    engine::world::Block *get_neighbour_block(int global_x, int global_y, int global_z);
+
+    engine::world::Chunk *get_neighbour_chunk_local(int local_x, int local_y, int local_z);
 
     void clear_mesh();
 };

@@ -99,6 +99,8 @@ class Mesh {
 
     std::vector<GLuint> _indices;
 
+    std::size_t _indices_length;
+
     void draw_lines();
 
     void draw_triangles();

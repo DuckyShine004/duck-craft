@@ -45,11 +45,28 @@ target_link_libraries(
           TBB::tbb
           FastNoise2::FastNoise)
 
-target_compile_options(duck-craft PRIVATE $<$<CONFIG:Release>:-O3 -march=native
-                                          -ffunction-sections -fdata-sections>)
+# target_compile_options(duck-craft PRIVATE $<$<CONFIG:Release>:-O3
+# -march=native -ffunction-sections -fdata-sections>)
+#
+# target_link_options(duck-craft PRIVATE $<$<CONFIG:Release>:-Wl,--as-needed
+# -Wl,--gc-sections>)
 
-target_link_options(duck-craft PRIVATE $<$<CONFIG:Release>:-Wl,--as-needed
-                    -Wl,--gc-sections>)
+# TEST: debug options
+
+target_compile_options(
+  duck-craft PRIVATE $<$<CONFIG:Release>:-O1 -g -fsanitize=address
+                     -fno-omit-frame-pointer>)
+
+target_link_options(duck-craft PRIVATE $<$<CONFIG:Release>:-fsanitize=address>)
 
 set_property(TARGET duck-craft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE
                                         TRUE)
+
+target_compile_options(
+  duck-craft PRIVATE $<$<CONFIG:Profile>:-O2 -g -fno-omit-frame-pointer
+                     -march=native>)
+
+target_link_options(duck-craft PRIVATE $<$<CONFIG:Profile>:-Wl,--as-needed>)
+
+set_property(TARGET duck-craft PROPERTY INTERPROCEDURAL_OPTIMIZATION_PROFILE
+                                        FALSE)

@@ -16,6 +16,8 @@ class MathUtility {
 
     static bool get_random_bool();
 
+    static float get_distance2(float ax, float ay, float az, float bx, float by, float bz);
+
     template <typename M> static const typename M::key_type &get_random_key_from_map(const M &container) {
         if (container.empty()) {
             throw std::runtime_error("Container is empty");

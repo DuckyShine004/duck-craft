@@ -50,6 +50,10 @@ void ThreadPool::push(std::function<void()> task) {
     {
         std::unique_lock<std::mutex> lock(this->_queue_mutex);
 
+        if (this->_stop) {
+            return;
+        }
+
         this->_tasks.emplace(std::move(task));
     }
 

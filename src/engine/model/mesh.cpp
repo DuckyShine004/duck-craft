@@ -8,7 +8,7 @@ using namespace engine::model;
 
 namespace engine::model {
 
-Mesh::Mesh() : _vao(0), _vbo(0), _ibo(0) {
+Mesh::Mesh() : _vao(0), _vbo(0), _ibo(0), _indices_length(0) {
 }
 
 Mesh::~Mesh() {
@@ -32,6 +32,8 @@ Mesh::~Mesh() {
 }
 
 void Mesh::upload() {
+    this->_indices_length = this->_indices.size();
+
     if (this->_vao == 0) {
         glGenVertexArrays(1, &this->_vao);
         glGenBuffers(1, &this->_vbo);
@@ -89,13 +91,13 @@ void Mesh::render(Topology topology) {
 
 void Mesh::draw_lines() {
     glBindVertexArray(this->_vao);
-    glDrawElements(GL_LINES, this->_indices.size(), GL_UNSIGNED_INT, (void *)0);
+    glDrawElements(GL_LINES, this->_indices_length, GL_UNSIGNED_INT, (void *)0);
     glBindVertexArray(0);
 }
 
 void Mesh::draw_triangles() {
     glBindVertexArray(this->_vao);
-    glDrawElements(GL_TRIANGLES, this->_indices.size(), GL_UNSIGNED_INT, (void *)0);
+    glDrawElements(GL_TRIANGLES, this->_indices_length, GL_UNSIGNED_INT, (void *)0);
     glBindVertexArray(0);
 }
 

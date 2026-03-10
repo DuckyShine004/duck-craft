@@ -4,9 +4,12 @@
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#include <fmt/format.h>
+
 #include <queue>
 
 #include "engine/world/chunk.hpp"
+#include "engine/world/world.hpp"
 
 #include "utility/colour_utility.hpp"
 
@@ -16,14 +19,18 @@
 
 using namespace engine::shader;
 
+using namespace engine::entity;
+
 using namespace engine::math::hash::vector;
 
 namespace engine::world {
 
-Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), global_y(global_y), global_z(global_z) {
+Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), global_y(global_y), global_z(global_z), _aabb(global_x, global_y, global_z, config::CHUNK_SIZE, config::CHUNK_SIZE, config::CHUNK_SIZE) {
     this->local_x = global_x >> config::CHUNK_SIZE_BITS;
     this->local_y = global_y >> config::CHUNK_SIZE_BITS;
     this->local_z = global_z >> config::CHUNK_SIZE_BITS;
+
+    std::fill(std::begin(neighbours), std::end(neighbours), nullptr);
 
     this->set_state(ChunkState::EMPTY);
 
@@ -34,19 +41,25 @@ Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), glo
     this->set_is_terrain_generation_complete(false);
 }
 
-void Chunk::generate(Generator &generator, HeightMap &height_map) {
+void Chunk::generate(World &world) {
+    HeightMap *height_map = world.find_height_map(this->local_x, this->local_z);
+
+    if (height_map == nullptr) {
+        throw std::runtime_error(fmt::format("ERROR: height map at position ({},{}) not found", this->local_x, this->local_z));
+    }
+
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
                 Block &block = this->get_block(x, y, z);
 
-                int height = height_map.get_height(x, z);
+                int height = height_map->get_height(x, z);
 
                 int dx = this->global_x + x;
                 int dy = this->global_y + y;
                 int dz = this->global_z + z;
 
-                if (generator.is_cave(dx, dy, dz)) {
+                if (world.generator->is_cave(dx, dy, dz)) {
                     continue;
                 }
 
@@ -63,129 +76,129 @@ void Chunk::generate(Generator &generator, HeightMap &height_map) {
 }
 
 // NOTE: Since chunks is being accessed concurrently during remesh, must also be part of remesh. Must also be calculated straight after generation, or as the first step of remesh
-void Chunk::propagate_sunlight(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, HeightMap &height_map) {
-    glm::ivec3 top_chunk_position(this->local_x, this->local_y + 1, this->local_z);
-
-    // Check if top chunk is loaded
-    Chunk *top_chunk = nullptr;
-
-    chunks.visit(top_chunk_position, [&](const auto &chunk_iterator) {
-        top_chunk = chunk_iterator.second.get();
-    });
-
-    bool is_top_chunk_loaded = (top_chunk != nullptr && top_chunk->is_terrain_generation_complete());
-
-    struct LightNode {
-        Chunk *chunk;
-
-        int index;
-
-        LightNode(Chunk *chunk, int index) : chunk(chunk), index(index) {
-        }
-    };
-
-    std::queue<LightNode> queue;
-
-    for (int z = 0; z < config::CHUNK_SIZE; ++z) {
-        for (int x = 0; x < config::CHUNK_SIZE; ++x) {
-            std::uint8_t sunlight = 0U;
-
-            // If current chunk column is below heightmap(x,z) then skip
-            if (is_top_chunk_loaded) {
-                sunlight = top_chunk->get_block(x, 0, z).get_sunlight();
-            } else {
-                if (this->global_y + config::CHUNK_SIZE - 1 > height_map.get_height(x, z)) {
-                    sunlight = 15U;
-                }
-            }
-
-            if (sunlight == 0U) {
-                continue;
-            }
-
-            for (int y = config::CHUNK_SIZE - 1; y >= 0; --y) {
-                Block &block = this->get_block(x, y, z);
-
-                if (block.get_type() > BlockType::EMPTY) {
-                    break;
-                }
-
-                block.set_sunlight(sunlight);
-
-                // LOG_INFO("Sunlight: {}", sunlight);
-
-                // Add to queue
-                queue.emplace(this, this->get_block_id(x, y, z));
-            }
-        }
-    }
-
-    while (!queue.empty()) {
-        LightNode &node = queue.front();
-
-        int index = node.index;
-
-        Chunk *chunk = node.chunk;
-
-        int x = index & (config::CHUNK_SIZE - 1);
-        int y = (index >> 5) & (config::CHUNK_SIZE - 1);
-        int z = (index >> 10) & (config::CHUNK_SIZE - 1);
-
-        int sunlight = chunk->get_block(index).get_sunlight();
-
-        queue.pop();
-
-        if (sunlight == 0U) {
-            continue;
-        }
-
-        for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
-            FaceType face_type = static_cast<FaceType>(face_type_index);
-
-            int adjacent_block_global_x = chunk->global_x + x + Face::I_NORMALS[face_type_index][0];
-            int adjacent_block_global_y = chunk->global_y + y + Face::I_NORMALS[face_type_index][1];
-            int adjacent_block_global_z = chunk->global_z + z + Face::I_NORMALS[face_type_index][2];
-
-            // Get adjacent chunk
-            Chunk *adjacent_chunk = chunk->get_global_chunk(chunks, adjacent_block_global_x, adjacent_block_global_y, adjacent_block_global_z);
-
-            if (adjacent_chunk == nullptr || !adjacent_chunk->is_terrain_generation_complete()) {
-                continue;
-            }
-
-            int adjacent_block_local_x = adjacent_block_global_x & (config::CHUNK_SIZE - 1);
-            int adjacent_block_local_y = adjacent_block_global_y & (config::CHUNK_SIZE - 1);
-            int adjacent_block_local_z = adjacent_block_global_z & (config::CHUNK_SIZE - 1);
-
-            int adjacent_block_id = adjacent_chunk->get_block_id(adjacent_block_local_x, adjacent_block_local_y, adjacent_block_local_z);
-
-            // Get global block
-            Block &adjacent_block = adjacent_chunk->get_block(adjacent_block_id);
-
-            // If solid
-            if (adjacent_block.get_type() > BlockType::EMPTY) {
-                continue;
-            }
-
-            bool should_propagate = (sunlight == 15U) && adjacent_block.get_sunlight() < sunlight && face_type == FaceType::BOTTOM;
-            // bool down = (face_type == FaceType::BOTTOM);
-            // int next = (sunlight == 15 && down) ? 15 : (sunlight - 1);
-
-            // if (next > adjacent_block.get_sunlight()) {
-            if (should_propagate || adjacent_block.get_sunlight() + 1 < sunlight) {
-                int next_sunlight = (should_propagate) ? sunlight : sunlight - 1;
-
-                // adjacent_block.set_sunlight(next);
-                adjacent_block.set_sunlight(next_sunlight);
-                // LOG_INFO("Sunlight: {}", next);
-
-                queue.emplace(adjacent_chunk, adjacent_block_id);
-            }
-        }
-    }
+void Chunk::propagate_sunlight(World &world) {
+    // glm::ivec3 top_chunk_position(this->local_x, this->local_y + 1, this->local_z);
+    //
+    // // Check if top chunk is loaded
+    // Chunk *top_chunk = nullptr;
+    //
+    // chunks.visit(top_chunk_position, [&](const auto &chunk_iterator) {
+    //     top_chunk = chunk_iterator.second.get();
+    // });
+    //
+    // bool is_top_chunk_loaded = (top_chunk != nullptr && top_chunk->is_terrain_generation_complete());
+    //
+    // struct LightNode {
+    //     Chunk *chunk;
+    //
+    //     int index;
+    //
+    //     LightNode(Chunk *chunk, int index) : chunk(chunk), index(index) {
+    //     }
+    // };
+    //
+    // std::queue<LightNode> queue;
+    //
+    // for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+    //     for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+    //         std::uint8_t sunlight = 0U;
+    //
+    //         // If current chunk column is below heightmap(x,z) then skip
+    //         if (is_top_chunk_loaded) {
+    //             sunlight = top_chunk->get_block(x, 0, z).get_sunlight();
+    //         } else {
+    //             if (this->global_y + config::CHUNK_SIZE - 1 > height_map.get_height(x, z)) {
+    //                 sunlight = 15U;
+    //             }
+    //         }
+    //
+    //         if (sunlight == 0U) {
+    //             continue;
+    //         }
+    //
+    //         for (int y = config::CHUNK_SIZE - 1; y >= 0; --y) {
+    //             Block &block = this->get_block(x, y, z);
+    //
+    //             if (block.get_type() > BlockType::EMPTY) {
+    //                 break;
+    //             }
+    //
+    //             block.set_sunlight(sunlight);
+    //
+    //             // LOG_INFO("Sunlight: {}", sunlight);
+    //
+    //             // Add to queue
+    //             queue.emplace(this, this->get_block_id(x, y, z));
+    //         }
+    //     }
+    // }
+    //
+    // while (!queue.empty()) {
+    //     LightNode &node = queue.front();
+    //
+    //     int index = node.index;
+    //
+    //     Chunk *chunk = node.chunk;
+    //
+    //     int x = index & (config::CHUNK_SIZE - 1);
+    //     int y = (index >> 5) & (config::CHUNK_SIZE - 1);
+    //     int z = (index >> 10) & (config::CHUNK_SIZE - 1);
+    //
+    //     int sunlight = chunk->get_block(index).get_sunlight();
+    //
+    //     queue.pop();
+    //
+    //     if (sunlight == 0U) {
+    //         continue;
+    //     }
+    //
+    //     for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
+    //         FaceType face_type = static_cast<FaceType>(face_type_index);
+    //
+    //         int adjacent_block_global_x = chunk->global_x + x + Face::I_NORMALS[face_type_index][0];
+    //         int adjacent_block_global_y = chunk->global_y + y + Face::I_NORMALS[face_type_index][1];
+    //         int adjacent_block_global_z = chunk->global_z + z + Face::I_NORMALS[face_type_index][2];
+    //
+    //         // Get adjacent chunk
+    //         Chunk *adjacent_chunk = chunk->get_global_chunk(chunks, adjacent_block_global_x, adjacent_block_global_y, adjacent_block_global_z);
+    //
+    //         if (adjacent_chunk == nullptr || !adjacent_chunk->is_terrain_generation_complete()) {
+    //             continue;
+    //         }
+    //
+    //         int adjacent_block_local_x = adjacent_block_global_x & (config::CHUNK_SIZE - 1);
+    //         int adjacent_block_local_y = adjacent_block_global_y & (config::CHUNK_SIZE - 1);
+    //         int adjacent_block_local_z = adjacent_block_global_z & (config::CHUNK_SIZE - 1);
+    //
+    //         int adjacent_block_id = adjacent_chunk->get_block_id(adjacent_block_local_x, adjacent_block_local_y, adjacent_block_local_z);
+    //
+    //         // Get global block
+    //         Block &adjacent_block = adjacent_chunk->get_block(adjacent_block_id);
+    //
+    //         // If solid
+    //         if (adjacent_block.get_type() > BlockType::EMPTY) {
+    //             continue;
+    //         }
+    //
+    //         bool should_propagate = (sunlight == 15U) && adjacent_block.get_sunlight() < sunlight && face_type == FaceType::BOTTOM;
+    //         // bool down = (face_type == FaceType::BOTTOM);
+    //         // int next = (sunlight == 15 && down) ? 15 : (sunlight - 1);
+    //
+    //         // if (next > adjacent_block.get_sunlight()) {
+    //         if (should_propagate || adjacent_block.get_sunlight() + 1 < sunlight) {
+    //             int next_sunlight = (should_propagate) ? sunlight : sunlight - 1;
+    //
+    //             // adjacent_block.set_sunlight(next);
+    //             adjacent_block.set_sunlight(next_sunlight);
+    //             // LOG_INFO("Sunlight: {}", next);
+    //
+    //             queue.emplace(adjacent_chunk, adjacent_block_id);
+    //         }
+    //     }
+    // }
 }
 
-void Chunk::generate_mesh(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
+void Chunk::generate_mesh(World &world) {
     this->clear_mesh();
 
     for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
@@ -198,7 +211,7 @@ void Chunk::generate_mesh(boost::unordered::concurrent_flat_map<glm::ivec3, std:
 
             int texture_id = block_type_index * 6 + face_type_index;
 
-            this->merge_faces(chunks, block_type, face_type, texture_id);
+            this->merge_faces(world, block_type, face_type, texture_id);
         }
     }
 
@@ -213,25 +226,28 @@ void Chunk::generate_mesh(boost::unordered::concurrent_flat_map<glm::ivec3, std:
     int total_faces = this->_faces.size();
 
     // LOG_INFO("Faces: {}, Vertices: {}", total_faces, total_faces << 2);
+    this->set_state(ChunkState::UPLOADING_MESH);
 }
 
 void Chunk::upload_mesh() {
     this->_mesh.upload();
 
+    this->clear_mesh();
+
     this->set_state(ChunkState::RENDERING);
 }
 
-void Chunk::merge_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, BlockType &block_type, FaceType &face_type, int texture_id) {
+void Chunk::merge_faces(World &world, BlockType &block_type, FaceType &face_type, int texture_id) {
     if (face_type == FaceType::FRONT || face_type == FaceType::BACK) {
-        this->merge_XY_faces(chunks, block_type, face_type, texture_id);
+        this->merge_XY_faces(world, block_type, face_type, texture_id);
     } else if (face_type == FaceType::TOP || face_type == FaceType::BOTTOM) {
-        this->merge_XZ_faces(chunks, block_type, face_type, texture_id);
+        this->merge_XZ_faces(world, block_type, face_type, texture_id);
     } else {
-        this->merge_YZ_faces(chunks, block_type, face_type, texture_id);
+        this->merge_YZ_faces(world, block_type, face_type, texture_id);
     }
 }
 
-void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, BlockType &block_type, FaceType &face_type, int texture_id) {
+void Chunk::merge_XY_faces(World &world, BlockType &block_type, FaceType &face_type, int texture_id) {
     int face_type_index = static_cast<int>(face_type);
 
     int nx = Face::I_NORMALS[face_type_index][0];
@@ -258,7 +274,7 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                 block_masks[y] |= (1U << x);
 
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
-                    ambient_occlusion_masks[y][x] |= (this->get_ambient_occlusion(chunks, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
+                    ambient_occlusion_masks[y][x] |= (this->get_ambient_occlusion(world, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
                 }
             }
         }
@@ -271,7 +287,7 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 
                 std::uint8_t sunlight = 0U;
 
-                Block *block = this->get_global_block(chunks, this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
+                Block *block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
                 if (block != nullptr) {
                     sunlight = block->get_sunlight();
@@ -290,7 +306,7 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                     int adjacent_block_y = this->global_y + y + ny;
                     int adjacent_block_z = this->global_z + z + nz;
 
-                    Block *adjacent_block = this->get_global_block(chunks, adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                    Block *adjacent_block = this->get_neighbour_block(adjacent_block_x, adjacent_block_y, adjacent_block_z);
 
                     if (adjacent_block != nullptr) {
                         adjacent_sunlight = adjacent_block->get_sunlight();
@@ -331,7 +347,7 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                         int adjacent_block_y = this->global_y + y + height + ny;
                         int adjacent_block_z = this->global_z + z + nz;
 
-                        Block *adjacent_block = this->get_global_block(chunks, adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                        Block *adjacent_block = this->get_neighbour_block(adjacent_block_x, adjacent_block_y, adjacent_block_z);
 
                         if (adjacent_block != nullptr) {
                             adjacent_sunlight = adjacent_block->get_sunlight();
@@ -371,7 +387,7 @@ void Chunk::merge_XY_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
     }
 }
 
-void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, BlockType &block_type, FaceType &face_type, int texture_id) {
+void Chunk::merge_XZ_faces(World &world, BlockType &block_type, FaceType &face_type, int texture_id) {
     int face_type_index = static_cast<int>(face_type);
 
     int nx = Face::I_NORMALS[face_type_index][0];
@@ -398,7 +414,7 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                 block_masks[z] |= (1U << x);
 
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
-                    ambient_occlusion_masks[z][x] |= (this->get_ambient_occlusion(chunks, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
+                    ambient_occlusion_masks[z][x] |= (this->get_ambient_occlusion(world, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
                 }
             }
         }
@@ -411,7 +427,7 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 
                 std::uint8_t sunlight = 0U;
 
-                Block *block = this->get_global_block(chunks, this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
+                Block *block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
                 if (block != nullptr) {
                     sunlight = block->get_sunlight();
@@ -430,7 +446,7 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                     int adjacent_block_y = this->global_y + y + ny;
                     int adjacent_block_z = this->global_z + z + nz;
 
-                    Block *adjacent_block = this->get_global_block(chunks, adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                    Block *adjacent_block = this->get_neighbour_block(adjacent_block_x, adjacent_block_y, adjacent_block_z);
 
                     if (adjacent_block != nullptr) {
                         adjacent_sunlight = adjacent_block->get_sunlight();
@@ -471,7 +487,7 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                         int adjacent_block_y = this->global_y + y + ny;
                         int adjacent_block_z = this->global_z + z + depth + nz;
 
-                        Block *adjacent_block = this->get_global_block(chunks, adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                        Block *adjacent_block = this->get_neighbour_block(adjacent_block_x, adjacent_block_y, adjacent_block_z);
 
                         if (adjacent_block != nullptr) {
                             adjacent_sunlight = adjacent_block->get_sunlight();
@@ -511,7 +527,7 @@ void Chunk::merge_XZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
     }
 }
 
-void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, BlockType &block_type, FaceType &face_type, int texture_id) {
+void Chunk::merge_YZ_faces(World &world, BlockType &block_type, FaceType &face_type, int texture_id) {
     int face_type_index = static_cast<int>(face_type);
 
     int nx = Face::I_NORMALS[face_type_index][0];
@@ -538,7 +554,7 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                 block_masks[z] |= (1U << y);
 
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
-                    ambient_occlusion_masks[z][y] |= (this->get_ambient_occlusion(chunks, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
+                    ambient_occlusion_masks[z][y] |= (this->get_ambient_occlusion(world, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
                 }
             }
         }
@@ -551,7 +567,7 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
 
                 std::uint8_t sunlight = 0U;
 
-                Block *block = this->get_global_block(chunks, this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
+                Block *block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
                 if (block != nullptr) {
                     sunlight = block->get_sunlight();
@@ -570,7 +586,7 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                     int adjacent_block_y = this->global_y + y + height + ny;
                     int adjacent_block_z = this->global_z + z + nz;
 
-                    Block *adjacent_block = this->get_global_block(chunks, adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                    Block *adjacent_block = this->get_neighbour_block(adjacent_block_x, adjacent_block_y, adjacent_block_z);
 
                     if (adjacent_block != nullptr) {
                         adjacent_sunlight = adjacent_block->get_sunlight();
@@ -611,7 +627,7 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                         int adjacent_block_y = this->global_y + dy + ny;
                         int adjacent_block_z = this->global_z + z + depth + nz;
 
-                        Block *adjacent_block = this->get_global_block(chunks, adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                        Block *adjacent_block = this->get_neighbour_block(adjacent_block_x, adjacent_block_y, adjacent_block_z);
 
                         if (adjacent_block != nullptr) {
                             adjacent_sunlight = adjacent_block->get_sunlight();
@@ -642,7 +658,6 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
                     face.set_ambient_occlusion_state(vertex_index, ambient_occlusion_mask);
 
-                    // face.vertices[vertex_index].sunlight = 15.0f;
                     face.vertices[vertex_index].sunlight = sunlight;
                 }
 
@@ -652,7 +667,7 @@ void Chunk::merge_YZ_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std
     }
 }
 
-void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
+void Chunk::occlude_faces(World &world) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             for (int x = 0; x < config::CHUNK_SIZE; ++x) {
@@ -667,8 +682,6 @@ void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std:
                     int dy = y + ny;
                     int dz = z + nz;
 
-                    int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
-
                     if (dx < 0 || dx >= config::CHUNK_SIZE || dy < 0 || dy >= config::CHUNK_SIZE || dz < 0 || dz >= config::CHUNK_SIZE) {
                         continue;
                     }
@@ -681,22 +694,16 @@ void Chunk::occlude_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std:
         }
     }
 
-    this->occlude_border_faces(chunks);
+    this->occlude_border_faces(world);
 }
 
-void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
+void Chunk::occlude_border_faces(World &world) {
     for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
         int nx = Face::I_NORMALS[face_type_index][0];
         int ny = Face::I_NORMALS[face_type_index][1];
         int nz = Face::I_NORMALS[face_type_index][2];
 
-        glm::ivec3 adjacent_chunk_position(this->local_x + nx, this->local_y + ny, this->local_z + nz);
-
-        Chunk *adjacent_chunk = nullptr;
-
-        chunks.visit(adjacent_chunk_position, [&](const auto &chunk_iterator) {
-            adjacent_chunk = chunk_iterator.second.get();
-        });
+        Chunk *adjacent_chunk = this->get_neighbour_chunk_local(this->local_x + nx, this->local_y + ny, this->local_z + nz);
 
         if (adjacent_chunk == nullptr) {
             continue;
@@ -720,7 +727,7 @@ void Chunk::occlude_border_faces(boost::unordered::concurrent_flat_map<glm::ivec
     }
 }
 
-void Chunk::occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks) {
+void Chunk::occlude_dirty_borders(World &world) {
     uint8_t mask = this->get_dirty_borders_mask_and_reset();
 
     uint8_t dirty_borders_mask = 0U;
@@ -734,13 +741,7 @@ void Chunk::occlude_dirty_borders(boost::unordered::concurrent_flat_map<glm::ive
         int ny = Face::I_NORMALS[face_type_index][1];
         int nz = Face::I_NORMALS[face_type_index][2];
 
-        glm::ivec3 adjacent_chunk_id(this->local_x + nx, this->local_y + ny, this->local_z + nz);
-
-        Chunk *adjacent_chunk = nullptr;
-
-        chunks.visit(adjacent_chunk_id, [&](const auto &chunk_iterator) {
-            adjacent_chunk = chunk_iterator.second.get();
-        });
+        Chunk *adjacent_chunk = this->get_neighbour_chunk_local(this->local_x + nx, this->local_y + ny, this->local_z + nz);
 
         if (adjacent_chunk == nullptr) {
             continue;
@@ -778,6 +779,7 @@ void Chunk::occlude_XY_faces(Chunk &adjacent_chunk, const FaceType &face_type) {
     for (int y = 0; y < config::CHUNK_SIZE; ++y) {
         for (int x = 0; x < config::CHUNK_SIZE; ++x) {
             Block &block = this->get_block(x, y, z);
+
             Block &adjacent_block = adjacent_chunk.get_block(x, y, dz);
 
             this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
@@ -795,6 +797,7 @@ void Chunk::occlude_XZ_faces(Chunk &adjacent_chunk, const FaceType &face_type) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int x = 0; x < config::CHUNK_SIZE; ++x) {
             Block &block = this->get_block(x, y, z);
+
             Block &adjacent_block = adjacent_chunk.get_block(x, dy, z);
 
             this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
@@ -812,6 +815,7 @@ void Chunk::occlude_YZ_faces(Chunk &adjacent_chunk, const FaceType &face_type) {
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int y = 0; y < config::CHUNK_SIZE; ++y) {
             Block &block = this->get_block(x, y, z);
+
             Block &adjacent_block = adjacent_chunk.get_block(dx, y, z);
 
             this->cull_face_based_on_adjacent_block(block, adjacent_block, face_type_index);
@@ -834,7 +838,7 @@ void Chunk::clear_mesh() {
     this->_faces.clear();
 }
 
-int Chunk::get_ambient_occlusion(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, int face_type_index, int vertex_index, int x, int y, int z) {
+int Chunk::get_ambient_occlusion(World &world, int face_type_index, int vertex_index, int x, int y, int z) {
     int side_values[3];
 
     for (int side_index = 0; side_index < 3; ++side_index) {
@@ -842,7 +846,7 @@ int Chunk::get_ambient_occlusion(boost::unordered::concurrent_flat_map<glm::ivec
         int side_block_y = this->global_y + y + this->_BLOCK_OFFSETS[face_type_index][vertex_index][side_index][1];
         int side_block_z = this->global_z + z + this->_BLOCK_OFFSETS[face_type_index][vertex_index][side_index][2];
 
-        Block *side_block = this->get_global_block(chunks, side_block_x, side_block_y, side_block_z);
+        Block *side_block = this->get_neighbour_block(side_block_x, side_block_y, side_block_z);
 
         if (side_block == nullptr) {
             side_values[side_index] = 0;
@@ -861,10 +865,6 @@ int Chunk::get_ambient_occlusion(boost::unordered::concurrent_flat_map<glm::ivec
 }
 
 void Chunk::render(Shader &shader) {
-    if (this->get_state() != ChunkState::RENDERING) {
-        return;
-    }
-
     glm::mat4 model(1.0f);
 
     shader.set_matrix4fv("u_model", model);
@@ -876,46 +876,6 @@ void Chunk::render(Shader &shader) {
 
 int Chunk::get_block_id(int x, int y, int z) {
     return x + (y << config::CHUNK_SIZE_BITS) + (z << config::CHUNK_SIZE_BITS2);
-}
-
-Chunk *Chunk::get_global_chunk(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, int global_x, int global_y, int global_z) {
-    int local_chunk_x = global_x >> config::CHUNK_SIZE_BITS;
-    int local_chunk_y = global_y >> config::CHUNK_SIZE_BITS;
-    int local_chunk_z = global_z >> config::CHUNK_SIZE_BITS;
-
-    glm::ivec3 chunk_id(local_chunk_x, local_chunk_y, local_chunk_z);
-
-    Chunk *chunk = nullptr;
-
-    chunks.visit(chunk_id, [&](const auto &chunk_iterator) {
-        chunk = chunk_iterator.second.get();
-    });
-
-    return chunk;
-}
-
-Block *Chunk::get_global_block(boost::unordered::concurrent_flat_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash, IVec3Equal> &chunks, int global_x, int global_y, int global_z) {
-    int local_chunk_x = global_x >> config::CHUNK_SIZE_BITS;
-    int local_chunk_y = global_y >> config::CHUNK_SIZE_BITS;
-    int local_chunk_z = global_z >> config::CHUNK_SIZE_BITS;
-
-    glm::ivec3 chunk_id(local_chunk_x, local_chunk_y, local_chunk_z);
-
-    Chunk *chunk = nullptr;
-
-    chunks.visit(chunk_id, [&](const auto &chunk_iterator) {
-        chunk = chunk_iterator.second.get();
-    });
-
-    if (chunk == nullptr || !chunk->is_terrain_generation_complete()) {
-        return nullptr;
-    }
-
-    int block_x = global_x & (config::CHUNK_SIZE - 1);
-    int block_y = global_y & (config::CHUNK_SIZE - 1);
-    int block_z = global_z & (config::CHUNK_SIZE - 1);
-
-    return &chunk->get_block(block_x, block_y, block_z);
 }
 
 Block &Chunk::get_block(int x, int y, int z) {
@@ -932,6 +892,10 @@ Block &Chunk::get_block(glm::ivec3 &position) {
 
 Block &Chunk::get_block(int index) {
     return this->_blocks[index];
+}
+
+AABB &Chunk::get_aabb() {
+    return this->_aabb;
 }
 
 ChunkState Chunk::get_state() {
@@ -975,6 +939,60 @@ bool Chunk::can_dirty_border_task_run() {
 
     // return this->_is_dirty_border_task_running.load(std::memory_order_acquire);
     return this->_is_dirty_border_task_running.compare_exchange_strong(can_dirty_border_task_run, true, std::memory_order_acq_rel);
+}
+
+Block *Chunk::get_neighbour_block(int global_x, int global_y, int global_z) {
+    int local_x = global_x >> config::CHUNK_SIZE_BITS;
+    int local_y = global_y >> config::CHUNK_SIZE_BITS;
+    int local_z = global_z >> config::CHUNK_SIZE_BITS;
+
+    int offset_x = local_x - this->local_x + 1;
+    int offset_y = local_y - this->local_y + 1;
+    int offset_z = local_z - this->local_z + 1;
+
+    int block_x = global_x & (config::CHUNK_SIZE - 1);
+    int block_y = global_y & (config::CHUNK_SIZE - 1);
+    int block_z = global_z & (config::CHUNK_SIZE - 1);
+
+    if (offset_x == 1 && offset_y == 1 && offset_z == 1) {
+        return &this->get_block(block_x, block_y, block_z);
+    }
+
+    if (offset_x < 0 || offset_x > 2 || offset_y < 0 || offset_y > 2 || offset_z < 0 || offset_z > 2) {
+        LOG_WARN("Chunk neighbour at position ({},{},{}) not found", local_x, local_y, local_z);
+
+        return nullptr;
+    }
+
+    int neighbour_id = offset_x + offset_y * 3 + offset_z * 9;
+
+    Chunk *neighbour = this->neighbours[neighbour_id];
+
+    if (neighbour == nullptr) {
+        return nullptr;
+    }
+
+    return &neighbour->get_block(block_x, block_y, block_z);
+}
+
+Chunk *Chunk::get_neighbour_chunk_local(int local_x, int local_y, int local_z) {
+    int offset_x = local_x - this->local_x + 1;
+    int offset_y = local_y - this->local_y + 1;
+    int offset_z = local_z - this->local_z + 1;
+
+    if (offset_x == 1 && offset_y == 1 && offset_z == 1) {
+        return this;
+    }
+
+    if (offset_x < 0 || offset_x > 2 || offset_y < 0 || offset_y > 2 || offset_z < 0 || offset_z > 2) {
+        LOG_WARN("Chunk neighbour at position ({},{},{}) not found", local_x, local_y, local_z);
+
+        return nullptr;
+    }
+
+    int neighbour_id = offset_x + offset_y * 3 + offset_z * 9;
+
+    return this->neighbours[neighbour_id];
 }
 
 } // namespace engine::world

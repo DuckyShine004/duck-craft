@@ -44,45 +44,28 @@ void Engine::initialise() {
     camera_manager.add_camera("player");
     camera_manager.add_camera("debug");
 
+    /* NOTE: Current camera is set to 'player' */
     camera_manager.set_camera("player");
-
-    // chunk_manager.generate_chunk(glm::vec3(0.0f));
-
-    const int TEST_CHUNK_SIZE = 3;
-
-    for (int x = -2; x < TEST_CHUNK_SIZE; ++x) {
-        for (int y = -2; y < TEST_CHUNK_SIZE; ++y) {
-            for (int z = -2; z < TEST_CHUNK_SIZE; ++z) {
-                int dx = x << 5;
-                int dy = y << 5;
-                int dz = z << 5;
-
-                chunk_manager.generate_chunk(glm::vec3(dx, dy, dz));
-            }
-        }
-    }
 }
 
 void Engine::update(GLFWwindow *window, float delta_time) {
-    ChunkManager &chunk_manager = ChunkManager::get_instance();
-    SoundManager &sound_manager = SoundManager::get_instance();
+    /* NOTE: Get the player camera */
     CameraManager &camera_manager = CameraManager::get_instance();
+
+    SoundManager &sound_manager = SoundManager::get_instance();
+
+    // sound_manager.play_music();
 
     Camera *camera = camera_manager.get_camera();
 
-    sound_manager.play_music();
-
-    // Camera *player_camera = camera_manager.get_camera("player");
-    //
-    // for (Cube &cube : this->_cubes) {
-    //     if (player_camera->get_frustum().intersect(cube.get_aabb())) {
-    //         cube.set_colour(GREEN_RGB);
-    //     } else {
-    //         cube.set_colour(WHITE_RGB);
-    //     }
-    // }
-
     camera->update(window, delta_time);
+
+    /* NOTE: Load chunks */
+    ChunkManager &chunk_manager = ChunkManager::get_instance();
+
+    Camera *player_camera = camera_manager.get_camera("player");
+
+    chunk_manager.load_chunks(player_camera);
 
     this->_cloud->update(camera->transform.position);
 
@@ -172,13 +155,13 @@ void Engine::render() {
     //
     // Shader &debug = shader_manager.get_shader("debug");
     //
-    // for (Camera *camera : camera_manager.get_cameras()) {
-    //     if (camera == current_camera) {
-    //         continue;
-    //     }
-    //
-    //     camera->get_frustum().render(scene);
-    // }
+    for (Camera *camera : camera_manager.get_cameras()) {
+        if (camera == current_camera) {
+            continue;
+        }
+
+        camera->get_frustum().render(scene);
+    }
 }
 
 } // namespace engine

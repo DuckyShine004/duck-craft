@@ -2,11 +2,24 @@
   "version": 3,
   "configurePresets": [
     {
-      "name": "default",
+      "name": "release",
       "generator": "Ninja",
-      "binaryDir": "build",
+      "binaryDir": "build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_SUPPRESS_DEVELOPER_WARNINGS": "TRUE",
+        "CMAKE_PREFIX_PATH": {
+          "type": "STRING",
+          "value": "$env{FASTNOISE2_PREFIX}"
+        }
+      }
+    },
+    {
+      "name": "profile",
+      "generator": "Ninja",
+      "binaryDir": "build/profile",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Profile",
         "CMAKE_SUPPRESS_DEVELOPER_WARNINGS": "TRUE",
         "CMAKE_PREFIX_PATH": {
           "type": "STRING",

@@ -24,4 +24,12 @@ bool MathUtility::get_random_bool() {
     return distribution(MathUtility::_RNG);
 }
 
+float MathUtility::get_distance2(float ax, float ay, float az, float bx, float by, float bz) {
+    float dx = bx - ax;
+    float dy = by - ay;
+    float dz = bz - az;
+
+    return dx * dx + dy * dy + dz * dz;
+}
+
 } // namespace utility

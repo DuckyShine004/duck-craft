@@ -58,7 +58,7 @@ SoundManager::~SoundManager() {
 }
 
 void SoundManager::initialise() {
-    this->initialise_music();
+    // this->initialise_music();
 }
 
 void SoundManager::initialise_music() {
@@ -96,6 +96,11 @@ void SoundManager::play(const std::string &type, const std::string &name) {
 
     std::unordered_map<std::string, Buffer> &buffers = type_iterator->second;
 
+    if (buffers.empty()) {
+        LOG_WARN("Sound buffers are empty");
+        return;
+    }
+
     auto buffer_iterator = buffers.find(name);
 
     if (buffer_iterator == buffers.end()) {
@@ -123,11 +128,21 @@ void SoundManager::play(const std::string &type, const std::string &name) {
 }
 
 void SoundManager::play_music() {
+    if (this->_sounds.empty()) {
+        LOG_WARN("Sound map is empty");
+        return;
+    }
+
     if (this->_music_source->is_playing()) {
         return;
     }
 
     std::unordered_map<std::string, Buffer> &music_buffers = this->_sounds.at("music");
+
+    if (music_buffers.empty()) {
+        LOG_WARN("Music buffers are empty");
+        return;
+    }
 
     const std::string &music_name = MathUtility::get_random_key_from_map(music_buffers);
 
