@@ -3,7 +3,7 @@
 namespace engine::world {
 
 enum class BlockType {
-    EMPTY = -1,
+    EMPTY = 0,
     GRASS,
     DIRT,
     STONE,

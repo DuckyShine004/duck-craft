@@ -44,7 +44,7 @@ float compute_phase(vec3 ray_direction, vec3 light_direction) {
 float compute_fog_density(vec3 ray_position, vec3 camera_position) {
     const float FOG_DENSITY = 0.5f;
 
-    const float RADIUS = 20.0f;
+    const float RADIUS = 50.0f;
 
     float distance = length(ray_position - camera_position);
 

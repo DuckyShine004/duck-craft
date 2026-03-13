@@ -74,7 +74,7 @@ Chunk *World::find_chunk(int chunk_local_x, int chunk_local_y, int chunk_local_z
     return this->chunks[iterator->second].get();
 }
 
-Block *World::find_global_block(int global_x, int global_y, int global_z) {
+std::uint16_t *World::find_global_block(int global_x, int global_y, int global_z) {
     int chunk_local_x = global_x >> config::CHUNK_SIZE_BITS;
     int chunk_local_y = global_y >> config::CHUNK_SIZE_BITS;
     int chunk_local_z = global_z >> config::CHUNK_SIZE_BITS;

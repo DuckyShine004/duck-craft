@@ -75,10 +75,10 @@ void main() {
     // INFO: Sharpness
 
     // INFO: Without lightmap
-    colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
+    // colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
 
     // INFO: Final fragment
-    // colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
+    colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
 
     // INFO: Fog
     // vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);

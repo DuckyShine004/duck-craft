@@ -91,7 +91,7 @@ void TextureManager::load_block_textures() {
     const int WIDTH = 16;
     const int HEIGHT = 16;
 
-    const int LAYERS = static_cast<int>(BlockType::COUNT) * 6;
+    const int LAYERS = (static_cast<int>(BlockType::COUNT) - 1) * 6;
 
     GLuint texture_handle = this->generate_texture_array_and_get_id("block", WIDTH, HEIGHT, LAYERS);
 

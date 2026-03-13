@@ -33,7 +33,7 @@ class World {
 
     engine::world::Chunk *find_chunk(int chunk_local_x, int chunk_local_y, int chunk_local_z);
 
-    engine::world::Block *find_global_block(int global_x, int global_y, int global_z);
+    std::uint16_t *find_global_block(int global_x, int global_y, int global_z);
 
     void set_chunk_neighbours(int chunk_local_x, int chunk_local_y, int chunk_local_z);
 

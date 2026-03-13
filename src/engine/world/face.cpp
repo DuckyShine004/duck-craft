@@ -9,8 +9,6 @@
 
 using namespace engine::model;
 
-using namespace engine::math::hash::vector;
-
 namespace engine::world {
 
 Face::Face(BlockType &block_type, FaceType &face_type, int x, int y, int z, int width, int height, int depth, int texture_id) : _block_type(block_type), _face_type(face_type), x(x), y(y), z(z), width(width), height(height), depth(depth), texture_id(texture_id) {

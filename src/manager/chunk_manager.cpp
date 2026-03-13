@@ -5,8 +5,6 @@
 
 #include "manager/chunk_manager.hpp"
 
-#include "utility/math_utility.hpp"
-
 #include "logger/logger_macros.hpp"
 
 using namespace engine::world;
@@ -16,8 +14,6 @@ using namespace engine::camera;
 using namespace engine::shader;
 
 using namespace engine::threading;
-
-using namespace utility;
 
 namespace manager {
 
@@ -66,99 +62,9 @@ void ChunkManager::generate_chunk_at_local_position(int local_x, int local_y, in
 
     Chunk *chunk = this->_world->chunks[chunk_id].get();
 
-    if (chunk->get_state() != ChunkState::EMPTY) {
-        return;
+    if (!chunk->is_task_running(ChunkTask::TERRAIN_GENERATION) && !chunk->is_state_set(ChunkState::TERRAIN_GENERATED)) {
+        chunk->queue_tasks(ChunkTask::TERRAIN_GENERATION);
     }
-
-    chunk->set_state(ChunkState::GENERATING_TERRAIN);
-
-    this->_thread_pool->push([this, chunk_id]() {
-        Chunk *chunk = this->_world->chunks[chunk_id].get();
-
-        chunk->generate(*this->_world);
-
-        chunk->set_is_terrain_generation_complete(true);
-
-        for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
-            int nx = Face::I_NORMALS[face_type_index][0];
-            int ny = Face::I_NORMALS[face_type_index][1];
-            int nz = Face::I_NORMALS[face_type_index][2];
-
-            int dx = chunk->local_x + nx;
-            int dy = chunk->local_y + ny;
-            int dz = chunk->local_z + nz;
-
-            Chunk *adjacent_chunk = this->_world->find_chunk(dx, dy, dz);
-
-            if (adjacent_chunk == nullptr) {
-                continue;
-            }
-
-            int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
-
-            adjacent_chunk->set_dirty_border_state(opposite_face_type_index, true);
-        }
-
-        chunk->propagate_sunlight(*this->_world);
-
-        chunk->set_state(ChunkState::OCCLUDING_FACES);
-
-        chunk->occlude_faces(*this->_world);
-
-        chunk->set_state(ChunkState::GENERATING_MESH);
-
-        chunk->generate_mesh(*this->_world);
-
-        chunk->set_state(ChunkState::UPLOADING_MESH);
-    });
-
-    // Chunk *chunk = this->_world->chunks[chunk_id].get();
-    //
-    // chunk->set_state(ChunkState::GENERATING_TERRAIN);
-    //
-    // chunk->generate(*this->_world);
-    //
-    // chunk->set_is_terrain_generation_complete(true);
-    //
-    // for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
-    //     int nx = Face::I_NORMALS[face_type_index][0];
-    //     int ny = Face::I_NORMALS[face_type_index][1];
-    //     int nz = Face::I_NORMALS[face_type_index][2];
-    //
-    //     int dx = chunk->local_x + nx;
-    //     int dy = chunk->local_y + ny;
-    //     int dz = chunk->local_z + nz;
-    //
-    //     Chunk *adjacent_chunk = this->_world->find_chunk(dx, dy, dz);
-    //
-    //     if (adjacent_chunk == nullptr) {
-    //         continue;
-    //     }
-    //
-    //     int opposite_face_type_index = (face_type_index & 1) ? face_type_index - 1 : face_type_index + 1;
-    //
-    //     adjacent_chunk->set_dirty_border_state(opposite_face_type_index, true);
-    // }
-    //
-    // chunk->propagate_sunlight(*this->_world);
-    //
-    // chunk->set_state(ChunkState::OCCLUDING_FACES);
-    //
-    // chunk->occlude_faces(*this->_world);
-    //
-    // if (chunk->has_dirty_borders()) {
-    //     return;
-    // }
-    //
-    // chunk->set_state(ChunkState::GENERATING_MESH);
-    //
-    // chunk->generate_mesh(*this->_world);
-    //
-    // if (chunk->has_dirty_borders()) {
-    //     return;
-    // }
-    //
-    // chunk->set_state(ChunkState::UPLOADING_MESH);
 }
 
 void ChunkManager::load_chunks(Camera *camera) {
@@ -183,7 +89,11 @@ void ChunkManager::load_chunks(Camera *camera) {
                     continue;
                 }
 
-                this->generate_chunk_at_local_position(x, y, z);
+                this->_world->try_emplace_height_map(x, z, global_x, global_z);
+
+                if (!chunk->is_task_running(ChunkTask::TERRAIN_GENERATION) && !chunk->is_state_set(ChunkState::TERRAIN_GENERATED)) {
+                    chunk->queue_tasks(ChunkTask::TERRAIN_GENERATION);
+                }
 
                 this->_loaded_chunk_ids.push_back(chunk_id);
             }
@@ -206,65 +116,46 @@ void ChunkManager::load_chunks(Camera *camera) {
 }
 
 void ChunkManager::process_chunks() {
-    // LOG_INFO("Loaded chunk size: {}", this->_loaded_chunk_ids.size());
-
     for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
         Chunk *chunk = this->_world->chunks[chunk_id].get();
 
-        // NOTE: Maybe don't need CAS?
-        if (chunk->is_terrain_generation_complete()) {
-            // Check if the chunk has dirty borders due to incomplete face occlusion
-
-            if (chunk->has_dirty_borders()) {
-                // If we are already meshing, then we skip
-                if (chunk->get_state() < ChunkState::UPLOADING_MESH) {
-                    continue;
-                }
-
-                if (!chunk->can_dirty_border_task_run()) {
-                    continue;
-                }
-
-                /* FIX: could pass chunk id, since we don't know when thread might execute, and may lead to dangling pointer */
-                this->_thread_pool->push([this, chunk]() {
-                    glm::ivec2 height_map_id(chunk->local_x, chunk->local_z);
-
-                    chunk->propagate_sunlight(*this->_world);
-
-                    chunk->occlude_dirty_borders(*this->_world);
-
-                    if (!chunk->has_dirty_borders()) {
-                        chunk->generate_mesh(*this->_world);
-
-                        chunk->set_state(ChunkState::UPLOADING_MESH);
-                    }
-
-                    chunk->set_is_dirty_border_task_running(false);
-                });
-                // glm::ivec2 height_map_id(chunk->local_x, chunk->local_z);
-                //
-                // chunk->propagate_sunlight(*this->_world);
-                //
-                // chunk->occlude_dirty_borders(*this->_world);
-                //
-                // if (!chunk->has_dirty_borders()) {
-                //     chunk->generate_mesh(*this->_world);
-                //
-                //     chunk->set_state(ChunkState::UPLOADING_MESH);
-                // }
-                //
-                // chunk->set_is_dirty_border_task_running(false);
-            }
+        if (chunk->is_task_queue_empty()) {
+            continue;
         }
 
-        ChunkState chunk_state = chunk->get_state();
+        if (chunk->can_run_task(ChunkTask::TERRAIN_GENERATION)) {
+            chunk->set_running_task(ChunkTask::TERRAIN_GENERATION);
 
-        switch (chunk_state) {
-            case ChunkState::UPLOADING_MESH:
-                chunk->upload_mesh();
-                break;
-            default:
-                break;
+            this->_thread_pool->push([this, chunk]() {
+                chunk->generate(*this->_world);
+
+                for (Chunk *neighbour : chunk->neighbours) {
+                    if (neighbour != nullptr && neighbour->is_state_set(ChunkState::TERRAIN_GENERATED)) {
+                        neighbour->queue_tasks(ChunkTask::LIGHT_PROPAGATION);
+                    }
+                }
+            });
+        } else if (chunk->can_run_task(ChunkTask::LIGHT_PROPAGATION)) {
+            chunk->set_running_task(ChunkTask::LIGHT_PROPAGATION);
+
+            chunk->clear_queued_task(ChunkTask::MESH_GENERATION);
+            chunk->clear_queued_task(ChunkTask::MESH_UPLOAD);
+
+            this->_thread_pool->push([this, chunk]() {
+                chunk->propagate_sunlight(*this->_world);
+            });
+        } else if (chunk->can_run_task(ChunkTask::MESH_GENERATION)) {
+            chunk->set_running_task(ChunkTask::MESH_GENERATION);
+
+            chunk->clear_queued_task(ChunkTask::MESH_UPLOAD);
+
+            this->_thread_pool->push([this, chunk]() {
+                chunk->generate_mesh();
+            });
+        } else if (chunk->can_run_task(ChunkTask::MESH_UPLOAD)) {
+            chunk->set_running_task(ChunkTask::MESH_UPLOAD);
+
+            chunk->upload_mesh();
         }
     }
 }
@@ -273,7 +164,7 @@ void ChunkManager::render(Shader &shader) {
     for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
         Chunk *chunk = this->_world->chunks[chunk_id].get();
 
-        if (chunk->get_state() == ChunkState::RENDERING) {
+        if (chunk->is_state_set(ChunkState::RENDERING)) {
             chunk->render(shader);
         }
 

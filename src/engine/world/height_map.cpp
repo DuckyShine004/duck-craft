@@ -25,9 +25,10 @@ void HeightMap::generate(Generator &generator, int global_chunk_x, int global_ch
     }
 }
 
-// TODO: Remember to throw error
 int HeightMap::get_height(int x, int z) {
     if (x < 0 || x >= config::CHUNK_SIZE || z < 0 || z >= config::CHUNK_SIZE) {
+        LOG_ERROR("Out of bounds: ({},{})", x, z);
+
         return -1;
     }
 

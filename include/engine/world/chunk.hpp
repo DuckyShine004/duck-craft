@@ -1,10 +1,8 @@
 #pragma once
 
-#include <memory>
-
 #include "engine/world/face.hpp"
-#include "engine/world/block.hpp"
 #include "engine/world/config.hpp"
+#include "engine/world/chunk_task.hpp"
 #include "engine/world/chunk_state.hpp"
 
 #include "engine/model/mesh.hpp"
@@ -12,9 +10,8 @@
 
 #include "engine/entity/aabb.hpp"
 
-#include "engine/math/hash/vector/ivec3.hpp"
-
 #include "engine/shader/shader.hpp"
+#include <nlohmann/detail/conversions/to_chars.hpp>
 
 namespace engine::world {
 
@@ -37,47 +34,42 @@ class Chunk {
     Chunk(int global_x, int global_y, int global_z);
 
     void generate(engine::world::World &world);
-
-    void generate_mesh(engine::world::World &world);
-
-    void occlude_faces(engine::world::World &world);
-
-    void occlude_dirty_borders(engine::world::World &world);
-
+    void generate_mesh();
     void propagate_sunlight(engine::world::World &world);
-
     void upload_mesh();
-
     void render(engine::shader::Shader &shader);
 
-    engine::world::Block &get_block(int x, int y, int z);
-    engine::world::Block &get_block(glm::ivec3 &position);
-    engine::world::Block &get_block(int index);
+    std::uint16_t &get_block(int x, int y, int z);
+    std::uint16_t &get_block(int index);
 
-    engine::world::ChunkState get_state();
+    std::uint16_t &get_light(int x, int y, int z);
+    std::uint16_t &get_light(int index);
 
     engine::entity::AABB &get_aabb();
 
+    bool is_state_set(const engine::world::ChunkState &state);
     void set_state(const engine::world::ChunkState &state);
+    void clear_state(const engine::world::ChunkState &state);
 
-    std::uint8_t get_dirty_borders_mask_and_reset();
+    bool is_task_running(const engine::world::ChunkTask &task);
+    bool can_run_task(const engine::world::ChunkTask &task);
+    void set_running_task(const engine::world::ChunkTask &task);
+    void clear_running_task(const engine::world::ChunkTask &task);
 
-    void set_dirty_border_state(int face_type_index, bool state);
+    bool is_task_queued(const engine::world::ChunkTask &task);
+    bool is_task_queue_empty();
+    void clear_queued_task(const engine::world::ChunkTask &task);
 
-    bool has_dirty_borders();
+    template <typename... ChunkTasks> void queue_tasks(ChunkTasks... tasks) {
+        std::uint8_t mask = 0;
 
-    bool can_dirty_border_task_run();
+        ((mask |= static_cast<std::uint8_t>(tasks)), ...);
 
-    void set_is_dirty_border_task_running(bool is_dirty_border_task_running);
-
-    bool is_terrain_generation_complete();
-
-    void set_is_terrain_generation_complete(bool is_terrain_generation_complete);
+        this->_queued_tasks.fetch_or(mask, std::memory_order_acq_rel);
+    }
 
   private:
     static inline constexpr engine::model::Topology _TOPOLOGY = engine::model::Topology::TRIANGLE;
-
-    static inline constexpr std::uint32_t _FULL_MASK = 0xFFFFFFFF;
 
     // clang-format off
     static inline constexpr int _BLOCK_OFFSETS[6][4][3][3] = {
@@ -133,7 +125,8 @@ class Chunk {
 
     int _height_map[engine::world::config::CHUNK_SIZE2];
 
-    engine::world::Block _blocks[engine::world::config::CHUNK_SIZE3];
+    std::uint16_t _blocks[engine::world::config::CHUNK_SIZE3];
+    std::uint16_t _lights[engine::world::config::CHUNK_SIZE3];
 
     engine::model::Mesh _mesh;
 
@@ -141,44 +134,27 @@ class Chunk {
 
     std::vector<engine::world::Face> _faces;
 
-    std::atomic<engine::world::ChunkState> _state;
+    std::atomic<std::uint8_t> _state;
+    std::atomic<std::uint8_t> _queued_tasks;
+    std::atomic<std::uint8_t> _running_tasks;
 
-    std::atomic<bool> _is_dirty_border_task_running;
+    int get_voxel_id(int x, int y, int z);
 
-    std::atomic<bool> _is_terrain_generation_complete;
+    void merge_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
 
-    std::atomic<std::uint8_t> _dirty_borders_mask;
-
-    int get_block_id(int x, int y, int z);
-
-    /**
-     * @brief Culls a face of @p block based on the presence and type of an adjacent block (@p adjacent_block).
-     *
-     * @param block: The block whose face may be culled.
-     * @param adjacent_block: The adjacent block used to determine whether the face of @block should be culled.
-     * @param face_type_index The face direction of @p block.
-     */
-    void cull_face_based_on_adjacent_block(engine::world::Block &block, engine::world::Block &adjacent_block, int face_type_index);
-
-    void merge_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
-
-    void merge_XY_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
-    void merge_XZ_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
-    void merge_YZ_faces(engine::world::World &world, engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_XY_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_XZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
+    void merge_YZ_faces(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int texture_id);
 
     void add_face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
 
-    void occlude_border_faces(engine::world::World &world);
+    int get_ambient_occlusion(int face_type_index, int vertex_index, int x, int y, int z);
 
-    void occlude_XY_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
-    void occlude_XZ_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
-    void occlude_YZ_faces(engine::world::Chunk &adjacent_chunk, const engine::world::FaceType &face_type);
-
-    int get_ambient_occlusion(engine::world::World &world, int face_type_index, int vertex_index, int x, int y, int z);
-
-    engine::world::Block *get_neighbour_block(int global_x, int global_y, int global_z);
+    std::uint16_t *get_neighbour_block(int global_x, int global_y, int global_z);
 
     engine::world::Chunk *get_neighbour_chunk_local(int local_x, int local_y, int local_z);
+
+    std::uint8_t get_neighbour_sunlight(int global_x, int global_y, int global_z);
 
     void clear_mesh();
 };
