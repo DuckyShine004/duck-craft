@@ -100,7 +100,9 @@ void ChunkManager::load_chunks(Camera *camera) {
         }
     }
 
-    /* NOTE: Sort by depth (distance to camera along view direction) */
+    glm::vec3 camera_position = camera->transform.position;
+
+    /* NOTE: Sort by depth (distance to camera along view direction), also camera could be moving, so we create a copy of the position first */
     std::sort(this->_loaded_chunk_ids.begin(), this->_loaded_chunk_ids.end(), [&](const auto &chunk_a_id, const auto &chunk_b_id) -> bool {
         Chunk *chunk_a = this->_world->chunks[chunk_a_id].get();
         Chunk *chunk_b = this->_world->chunks[chunk_b_id].get();
@@ -108,14 +110,14 @@ void ChunkManager::load_chunks(Camera *camera) {
         glm::vec3 chunk_a_centre = glm::vec3(chunk_a->global_x, chunk_a->global_y, chunk_a->global_z) + config::CHUNK_SIZE_HALF_F;
         glm::vec3 chunk_b_centre = glm::vec3(chunk_b->global_x, chunk_b->global_y, chunk_b->global_z) + config::CHUNK_SIZE_HALF_F;
 
-        float depth_a = glm::dot(chunk_a_centre - camera->transform.position, camera->get_front());
-        float depth_b = glm::dot(chunk_b_centre - camera->transform.position, camera->get_front());
+        float depth_a = glm::dot(chunk_a_centre - camera_position, camera->get_front());
+        float depth_b = glm::dot(chunk_b_centre - camera_position, camera->get_front());
 
-        return depth_a < depth_b;
+        return depth_a > depth_b;
     });
 }
 
-void ChunkManager::process_chunks() {
+void ChunkManager::process_chunks(Camera *camera) {
     for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
         Chunk *chunk = this->_world->chunks[chunk_id].get();
 
@@ -123,52 +125,59 @@ void ChunkManager::process_chunks() {
             continue;
         }
 
-        if (chunk->can_run_task(ChunkTask::TERRAIN_GENERATION)) {
+        if (chunk->can_generate_terrain()) {
             chunk->set_running_task(ChunkTask::TERRAIN_GENERATION);
 
             this->_thread_pool->push([this, chunk]() {
-                chunk->generate(*this->_world);
-
-                for (Chunk *neighbour : chunk->neighbours) {
-                    if (neighbour != nullptr && neighbour->is_state_set(ChunkState::TERRAIN_GENERATED)) {
-                        neighbour->queue_tasks(ChunkTask::LIGHT_PROPAGATION);
-                    }
-                }
+                chunk->generate_terrain(*this->_world);
             });
-        } else if (chunk->can_run_task(ChunkTask::LIGHT_PROPAGATION)) {
+        } else if (chunk->can_propagate_sunlight()) {
             chunk->set_running_task(ChunkTask::LIGHT_PROPAGATION);
-
-            chunk->clear_queued_task(ChunkTask::MESH_GENERATION);
-            chunk->clear_queued_task(ChunkTask::MESH_UPLOAD);
 
             this->_thread_pool->push([this, chunk]() {
                 chunk->propagate_sunlight(*this->_world);
+
+                for (Chunk *neighbour : chunk->neighbours) {
+                    if (neighbour == nullptr) {
+                        continue;
+                    }
+
+                    neighbour->queue_tasks(ChunkTask::MESH_GENERATION);
+                }
             });
-        } else if (chunk->can_run_task(ChunkTask::MESH_GENERATION)) {
+        } else if (chunk->can_generate_mesh()) {
             chunk->set_running_task(ChunkTask::MESH_GENERATION);
 
-            chunk->clear_queued_task(ChunkTask::MESH_UPLOAD);
-
-            this->_thread_pool->push([this, chunk]() {
-                chunk->generate_mesh();
+            this->_thread_pool->push([this, chunk, camera]() {
+                chunk->generate_mesh(*camera);
             });
-        } else if (chunk->can_run_task(ChunkTask::MESH_UPLOAD)) {
+        } else if (chunk->can_upload_mesh()) {
             chunk->set_running_task(ChunkTask::MESH_UPLOAD);
 
             chunk->upload_mesh();
         }
+
+        chunk->process_dirty_neighbours_sunlight();
     }
 }
 
-void ChunkManager::render(Shader &shader) {
+void ChunkManager::render_opaque(Shader &shader) {
     for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
         Chunk *chunk = this->_world->chunks[chunk_id].get();
 
         if (chunk->is_state_set(ChunkState::RENDERING)) {
-            chunk->render(shader);
+            chunk->render_opaque(shader);
         }
+    }
+}
 
-        chunk->get_aabb().render(shader);
+void ChunkManager::render_transparent(Shader &shader) {
+    for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
+        Chunk *chunk = this->_world->chunks[chunk_id].get();
+
+        if (chunk->is_state_set(ChunkState::RENDERING)) {
+            chunk->render_transparent(shader);
+        }
     }
 }
 

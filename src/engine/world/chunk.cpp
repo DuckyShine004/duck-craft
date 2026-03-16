@@ -19,6 +19,8 @@
 
 #include "logger/logger_macros.hpp"
 
+using namespace engine::camera;
+
 using namespace engine::shader;
 
 using namespace engine::entity;
@@ -39,9 +41,11 @@ Chunk::Chunk(int global_x, int global_y, int global_z) : global_x(global_x), glo
 
     this->_queued_tasks = 0U;
     this->_running_tasks = 0U;
+
+    this->_dirty_neighbours_sunlight = 0U;
 }
 
-void Chunk::generate(World &world) {
+void Chunk::generate_terrain(World &world) {
     HeightMap *height_map = world.find_height_map(this->local_x, this->local_z);
 
     if (height_map == nullptr) {
@@ -63,16 +67,22 @@ void Chunk::generate(World &world) {
                 int dy = this->global_y + y;
                 int dz = this->global_z + z;
 
+                Block::set(block, BlockType::EMPTY);
+
+                if (dy == 10) {
+                    Block::set(block, BlockType::WATER);
+                }
+
                 if (world.generator->is_cave(dx, dy, dz)) {
                     continue;
                 }
 
                 if (dy == height) {
-                    Block::set_type(block, BlockType::GRASS);
+                    Block::set(block, BlockType::GRASS);
                 } else if (dy < height && dy >= height - 3) {
-                    Block::set_type(block, BlockType::DIRT);
+                    Block::set(block, BlockType::DIRT);
                 } else if (dy < height - 3) {
-                    Block::set_type(block, BlockType::STONE);
+                    Block::set(block, BlockType::STONE);
                 }
             }
         }
@@ -85,7 +95,6 @@ void Chunk::generate(World &world) {
     this->queue_tasks(ChunkTask::LIGHT_PROPAGATION);
 }
 
-/* BUG: Lighting bug, not sure where... may need to revise SOA blog again... */
 void Chunk::propagate_sunlight(World &world) {
     HeightMap *height_map = world.find_height_map(this->local_x, this->local_z);
 
@@ -97,22 +106,30 @@ void Chunk::propagate_sunlight(World &world) {
         return;
     }
 
+    this->clear_state(ChunkState::SUNLIGHT_PROPAGATED);
+
+    std::uint16_t lights[config::CHUNK_SIZE3];
+
+    std::copy(std::begin(this->_lights), std::end(this->_lights), std::begin(lights));
+
+    std::memset(this->_lights, 0U, sizeof(this->_lights));
+
     Chunk *top_chunk = this->get_neighbour_chunk_local(this->local_x, this->local_y + 1, this->local_z);
 
-    bool is_top_chunk_loaded = (top_chunk != nullptr && top_chunk->is_state_set(ChunkState::TERRAIN_GENERATED));
+    bool is_top_chunk_loaded = (top_chunk != nullptr && top_chunk->is_state_set(ChunkState::SUNLIGHT_PROPAGATED));
 
     /* TODO: Create separate light node struct */
-    struct LightNode {
-        Chunk *chunk;
 
+    struct LightNode {
         int index;
 
-        LightNode(Chunk *chunk, int index) : chunk(chunk), index(index) {
+        LightNode(int index) : index(index) {
         }
     };
 
     std::queue<LightNode> queue;
 
+    // Top chunk seeding
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int x = 0; x < config::CHUNK_SIZE; ++x) {
             std::uint8_t sunlight = 0U;
@@ -130,7 +147,7 @@ void Chunk::propagate_sunlight(World &world) {
                     if (Block::get_type(top_block) == BlockType::EMPTY && top_sunlight < bottom_sunlight) {
                         Light::set_sunlight(this->_lights[top_voxel_id], bottom_sunlight);
 
-                        queue.emplace(this, top_voxel_id);
+                        queue.emplace(top_voxel_id);
                     }
                 }
             } else {
@@ -156,7 +173,123 @@ void Chunk::propagate_sunlight(World &world) {
 
                 Light::set_sunlight(light, sunlight);
 
-                queue.emplace(this, voxel_id);
+                queue.emplace(voxel_id);
+            }
+        }
+    }
+
+    // Check sideways propagation: XY front and back
+    for (int z : {0, 31}) {
+        int dz = (z == 0) ? -1 : 1;
+
+        Chunk *neighbour_chunk = this->get_neighbour_chunk_local(this->local_x, this->local_y, this->local_z + dz);
+
+        // If the neighbour chunk hasn't loaded yet, then we skip, neighbour is loaded if lighting is done
+        if (neighbour_chunk == nullptr || !neighbour_chunk->is_state_set(ChunkState::SUNLIGHT_PROPAGATED)) {
+            continue;
+        }
+
+        int neighbour_z = (z == 0) ? 31 : 0;
+
+        for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+            for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                // If the current block is solid, then we skip
+                if (Block::get_type(this->_blocks[voxel_id]) > BlockType::EMPTY) {
+                    continue;
+                }
+
+                // Check if we emplace voxel x,y,z in queue by checking sunlight at neighbour.(x,y,neighbour_z)
+                int neighbour_voxel_id = neighbour_chunk->get_voxel_id(x, y, neighbour_z);
+
+                std::uint8_t neighbour_sunlight = Light::get_sunlight(neighbour_chunk->get_light(neighbour_voxel_id));
+
+                // If neighbour sunlight is 0 then we skip
+                if (neighbour_sunlight == 0U) {
+                    continue;
+                }
+
+                // If neighbour block is solid, we skip
+                if (Block::get_type(neighbour_chunk->get_block(neighbour_voxel_id)) > BlockType::EMPTY) {
+                    continue;
+                }
+
+                std::uint8_t sunlight = neighbour_sunlight - 1U;
+
+                // Already 0 from before, so useless to place voxel into queue
+                if (sunlight == 0U) {
+                    continue;
+                }
+
+                std::uint16_t &light = this->_lights[voxel_id];
+
+                // If the neighbour sunlight is just as luminous as current sunlight then we continue
+                if (Light::get_sunlight(light) >= sunlight) {
+                    continue;
+                }
+
+                Light::set_sunlight(light, sunlight);
+
+                queue.emplace(voxel_id);
+            }
+        }
+    }
+
+    // Check YZ faces
+    for (int x : {0, 31}) {
+        int dx = (x == 0) ? -1 : 1;
+
+        Chunk *neighbour_chunk = this->get_neighbour_chunk_local(this->local_x + dx, this->local_y, this->local_z);
+
+        // If the neighbour chunk hasn't loaded yet, then we skip, neighbour is loaded if lighting is done
+        if (neighbour_chunk == nullptr || !neighbour_chunk->is_state_set(ChunkState::SUNLIGHT_PROPAGATED)) {
+            continue;
+        }
+
+        int neighbour_x = (x == 0) ? 31 : 0;
+
+        for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+            for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                // If the current block is solid, then we skip
+                if (Block::get_type(this->_blocks[voxel_id]) > BlockType::EMPTY) {
+                    continue;
+                }
+
+                // Check if we emplace voxel x,y,z in queue by checking sunlight at neighbour.(x,y,neighbour_z)
+                int neighbour_voxel_id = neighbour_chunk->get_voxel_id(neighbour_x, y, z);
+
+                std::uint8_t neighbour_sunlight = Light::get_sunlight(neighbour_chunk->get_light(neighbour_voxel_id));
+
+                // If neighbour sunlight is 0 then we skip
+                if (neighbour_sunlight == 0U) {
+                    continue;
+                }
+
+                // If neighbour block is solid, we skip
+                if (Block::get_type(neighbour_chunk->get_block(neighbour_voxel_id)) > BlockType::EMPTY) {
+                    continue;
+                }
+
+                std::uint8_t sunlight = neighbour_sunlight - 1U;
+
+                // Already 0 from before, so useless to place voxel into queue
+                if (sunlight == 0U) {
+                    continue;
+                }
+
+                std::uint16_t &light = this->_lights[voxel_id];
+
+                // If the neighbour sunlight is just as luminous as current sunlight then we continue
+                if (Light::get_sunlight(light) >= sunlight) {
+                    continue;
+                }
+
+                Light::set_sunlight(light, sunlight);
+
+                queue.emplace(voxel_id);
             }
         }
     }
@@ -166,13 +299,11 @@ void Chunk::propagate_sunlight(World &world) {
 
         int index = node.index;
 
-        Chunk *chunk = node.chunk;
-
         int x = index & (config::CHUNK_SIZE - 1);
         int y = (index >> config::CHUNK_SIZE_BITS) & (config::CHUNK_SIZE - 1);
         int z = (index >> config::CHUNK_SIZE_BITS2) & (config::CHUNK_SIZE - 1);
 
-        std::uint8_t sunlight = Light::get_sunlight(chunk->get_light(index));
+        std::uint8_t sunlight = Light::get_sunlight(this->get_light(index));
 
         queue.pop();
 
@@ -183,59 +314,126 @@ void Chunk::propagate_sunlight(World &world) {
         for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
             FaceType face_type = static_cast<FaceType>(face_type_index);
 
-            int adjacent_block_global_x = chunk->global_x + x + Face::I_NORMALS[face_type_index][0];
-            int adjacent_block_global_y = chunk->global_y + y + Face::I_NORMALS[face_type_index][1];
-            int adjacent_block_global_z = chunk->global_z + z + Face::I_NORMALS[face_type_index][2];
-
-            int adjacent_chunk_local_x = adjacent_block_global_x >> config::CHUNK_SIZE_BITS;
-            int adjacent_chunk_local_y = adjacent_block_global_y >> config::CHUNK_SIZE_BITS;
-            int adjacent_chunk_local_z = adjacent_block_global_z >> config::CHUNK_SIZE_BITS;
-
-            Chunk *adjacent_chunk = chunk->get_neighbour_chunk_local(adjacent_chunk_local_x, adjacent_chunk_local_y, adjacent_chunk_local_z);
-
-            if (adjacent_chunk == nullptr || !adjacent_chunk->is_state_set(ChunkState::TERRAIN_GENERATED)) {
+            // Skip upwards propagation
+            if (face_type == FaceType::TOP) {
                 continue;
             }
 
-            int adjacent_block_local_x = adjacent_block_global_x & (config::CHUNK_SIZE - 1);
-            int adjacent_block_local_y = adjacent_block_global_y & (config::CHUNK_SIZE - 1);
-            int adjacent_block_local_z = adjacent_block_global_z & (config::CHUNK_SIZE - 1);
+            int neighbour_x = x + Face::I_NORMALS[face_type_index][0];
+            int neighbour_y = y + Face::I_NORMALS[face_type_index][1];
+            int neighbour_z = z + Face::I_NORMALS[face_type_index][2];
 
-            int adjacent_voxel_id = adjacent_chunk->get_voxel_id(adjacent_block_local_x, adjacent_block_local_y, adjacent_block_local_z);
-
-            std::uint16_t &adjacent_block = adjacent_chunk->get_block(adjacent_voxel_id);
-            std::uint16_t &adjacent_light = adjacent_chunk->get_light(adjacent_voxel_id);
-
-            if (Block::get_type(adjacent_block) > BlockType::EMPTY) {
+            if (neighbour_x < 0 || neighbour_x >= config::CHUNK_SIZE || neighbour_y < 0 || neighbour_y >= config::CHUNK_SIZE || neighbour_z < 0 || neighbour_z >= config::CHUNK_SIZE) {
                 continue;
             }
 
-            std::uint8_t adjacent_sunlight = sunlight - 1U;
+            int neighbour_voxel_id = this->get_voxel_id(neighbour_x, neighbour_y, neighbour_z);
+
+            std::uint16_t &neighbour_block = this->get_block(neighbour_voxel_id);
+            std::uint16_t &neighbour_light = this->get_light(neighbour_voxel_id);
+
+            if (Block::get_type(neighbour_block) > BlockType::EMPTY) {
+                continue;
+            }
+
+            std::uint8_t next_sunlight = sunlight - 1U;
 
             if (face_type == FaceType::BOTTOM && sunlight == 15U) {
-                adjacent_sunlight = sunlight;
+                next_sunlight = sunlight;
             }
 
-            if (adjacent_sunlight <= 0U) {
+            if (next_sunlight == 0U) {
                 continue;
             }
 
-            if (Light::get_sunlight(adjacent_light) >= adjacent_sunlight) {
+            if (Light::get_sunlight(neighbour_light) >= next_sunlight) {
                 continue;
             }
 
-            Light::set_sunlight(adjacent_light, adjacent_sunlight);
+            Light::set_sunlight(neighbour_light, next_sunlight);
 
-            queue.emplace(adjacent_chunk, adjacent_voxel_id);
+            queue.emplace(neighbour_voxel_id);
         }
     }
+
+    std::uint8_t neighbours_to_notify = 0U;
+
+    // Check LEFT RIGHT borders
+    for (int x : {0, 31}) {
+        std::uint8_t face_mask = (x == 0) ? (1U << 3) : (1U << 2);
+
+        bool valid = false;
+
+        for (int z = 0; z < config::CHUNK_SIZE && !valid; ++z) {
+            for (int y = 0; y < config::CHUNK_SIZE && !valid; ++y) {
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                if (lights[voxel_id] != this->_lights[voxel_id]) {
+                    valid = true;
+                    break;
+                }
+            }
+        }
+
+        if (valid) {
+            neighbours_to_notify |= face_mask;
+        }
+    }
+
+    // Check BACK FRONT borders
+    for (int z : {0, 31}) {
+        std::uint8_t face_mask = (z == 0) ? (1U << 5) : (1U << 4);
+
+        bool valid = false;
+
+        for (int y = 0; y < config::CHUNK_SIZE && !valid; ++y) {
+            for (int x = 0; x < config::CHUNK_SIZE && !valid; ++x) {
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                if (lights[voxel_id] != this->_lights[voxel_id]) {
+                    valid = true;
+                    break;
+                }
+            }
+        }
+
+        if (valid) {
+            neighbours_to_notify |= face_mask;
+        }
+    }
+
+    // Check BOTTOM TOP borders
+    for (int y : {0}) {
+        std::uint8_t face_mask = (y == 0) ? (1U << 1) : (1U << 0);
+
+        bool valid = false;
+
+        for (int z = 0; z < config::CHUNK_SIZE && !valid; ++z) {
+            for (int x = 0; x < config::CHUNK_SIZE && !valid; ++x) {
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                if (lights[voxel_id] != this->_lights[voxel_id]) {
+                    valid = true;
+                    break;
+                }
+            }
+        }
+
+        if (valid) {
+            neighbours_to_notify |= face_mask;
+        }
+    }
+
+    this->_dirty_neighbours_sunlight.fetch_or(neighbours_to_notify, std::memory_order_acq_rel);
+
+    this->set_state(ChunkState::SUNLIGHT_PROPAGATED);
 
     this->clear_running_task(ChunkTask::LIGHT_PROPAGATION);
 
     this->queue_tasks(ChunkTask::MESH_GENERATION);
 }
 
-void Chunk::generate_mesh() {
+void Chunk::generate_mesh(Camera &camera) {
     this->clear_mesh();
 
     for (int face_type_index = 0; face_type_index < 6; ++face_type_index) {
@@ -254,8 +452,28 @@ void Chunk::generate_mesh() {
 
     int index_offset = 0;
 
-    for (Face &face : this->_faces) {
-        face.add_to_mesh(this->_mesh, index_offset);
+    for (Face &face : this->_opaque_faces) {
+        face.add_to_mesh(this->_opaque_mesh, index_offset);
+
+        index_offset += 4;
+    }
+
+    glm::vec3 camera_position = camera.transform.position;
+
+    std::sort(this->_transparent_faces.begin(), this->_transparent_faces.end(), [&](const auto &face_a, const auto &face_b) {
+        glm::vec3 face_a_centre = glm::vec3(face_a.x + face_a.width, face_a.y + face_a.height, face_a.z + face_a.depth) / 2.0f;
+        glm::vec3 face_b_centre = glm::vec3(face_b.x + face_b.width, face_b.y + face_b.height, face_b.z + face_b.depth) / 2.0f;
+
+        float depth_a = glm::dot(face_a_centre - camera_position, camera.get_front());
+        float depth_b = glm::dot(face_b_centre - camera_position, camera.get_front());
+
+        return depth_a < depth_b;
+    });
+
+    index_offset = 0;
+
+    for (Face &face : this->_transparent_faces) {
+        face.add_to_mesh(this->_transparent_mesh, index_offset);
 
         index_offset += 4;
     }
@@ -266,7 +484,8 @@ void Chunk::generate_mesh() {
 }
 
 void Chunk::upload_mesh() {
-    this->_mesh.upload();
+    this->_opaque_mesh.upload();
+    this->_transparent_mesh.upload();
 
     this->clear_mesh();
 
@@ -276,6 +495,10 @@ void Chunk::upload_mesh() {
 }
 
 void Chunk::merge_faces(BlockType &block_type, FaceType &face_type, int texture_id) {
+    if (block_type == BlockType::WATER && face_type != FaceType::TOP) {
+        return;
+    }
+
     if (face_type == FaceType::FRONT || face_type == FaceType::BACK) {
         this->merge_XY_faces(block_type, face_type, texture_id);
     } else if (face_type == FaceType::TOP || face_type == FaceType::BOTTOM) {
@@ -311,14 +534,18 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 std::uint16_t *adjacent_block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
-                if (adjacent_block != nullptr && Block::get_type(*adjacent_block) != BlockType::EMPTY) {
-                    continue;
+                // If the adjacent block is loaded
+                if (adjacent_block != nullptr) {
+                    // If the adjacent block is not empty
+                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
+                        continue;
+                    }
                 }
 
                 block_masks[y] |= (1U << x);
 
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
-                    ambient_occlusion_masks[y][x] |= (this->get_ambient_occlusion(face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
+                    ambient_occlusion_masks[y][x] |= (this->get_ambient_occlusion(block_type, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
                 }
             }
         }
@@ -407,7 +634,13 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type, int textu
                     face.vertices[vertex_index].sunlight = sunlight;
                 }
 
-                this->_faces.emplace_back(std::move(face));
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
+                    this->_transparent_faces.emplace_back(std::move(face));
+                } else {
+                    this->_opaque_faces.emplace_back(std::move(face));
+                }
             }
         }
     }
@@ -439,14 +672,18 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 std::uint16_t *adjacent_block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
-                if (adjacent_block != nullptr && Block::get_type(*adjacent_block) != BlockType::EMPTY) {
-                    continue;
+                // If the adjacent block is loaded
+                if (adjacent_block != nullptr) {
+                    // If the adjacent block is not empty
+                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
+                        continue;
+                    }
                 }
 
                 block_masks[z] |= (1U << x);
 
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
-                    ambient_occlusion_masks[z][x] |= (this->get_ambient_occlusion(face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
+                    ambient_occlusion_masks[z][x] |= (this->get_ambient_occlusion(block_type, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
                 }
             }
         }
@@ -535,7 +772,13 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
                     face.vertices[vertex_index].sunlight = sunlight;
                 }
 
-                this->_faces.emplace_back(std::move(face));
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
+                    this->_transparent_faces.emplace_back(std::move(face));
+                } else {
+                    this->_opaque_faces.emplace_back(std::move(face));
+                }
             }
         }
     }
@@ -567,14 +810,18 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 std::uint16_t *adjacent_block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
-                if (adjacent_block != nullptr && Block::get_type(*adjacent_block) != BlockType::EMPTY) {
-                    continue;
+                // If the adjacent block is loaded
+                if (adjacent_block != nullptr) {
+                    // If the adjacent block is not empty
+                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
+                        continue;
+                    }
                 }
 
                 block_masks[z] |= (1U << y);
 
                 for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
-                    ambient_occlusion_masks[z][y] |= (this->get_ambient_occlusion(face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
+                    ambient_occlusion_masks[z][y] |= (this->get_ambient_occlusion(block_type, face_type_index, vertex_index, x, y, z) & 0b11) << (vertex_index << 1);
                 }
             }
         }
@@ -663,19 +910,31 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type, int textu
                     face.vertices[vertex_index].sunlight = sunlight;
                 }
 
-                this->_faces.emplace_back(std::move(face));
+                int voxel_id = this->get_voxel_id(x, y, z);
+
+                if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
+                    this->_transparent_faces.emplace_back(std::move(face));
+                } else {
+                    this->_opaque_faces.emplace_back(std::move(face));
+                }
             }
         }
     }
 }
 
 void Chunk::clear_mesh() {
-    this->_mesh.clear();
+    this->_opaque_mesh.clear();
+    this->_transparent_mesh.clear();
 
-    this->_faces.clear();
+    this->_opaque_faces.clear();
+    this->_transparent_faces.clear();
 }
 
-int Chunk::get_ambient_occlusion(int face_type_index, int vertex_index, int x, int y, int z) {
+int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int vertex_index, int x, int y, int z) {
+    if (block_type == BlockType::WATER) {
+        return 3;
+    }
+
     int side_values[3];
 
     for (int side_index = 0; side_index < 3; ++side_index) {
@@ -701,14 +960,24 @@ int Chunk::get_ambient_occlusion(int face_type_index, int vertex_index, int x, i
     return 3 - (side_values[0] + side_values[1] + side_values[2]);
 }
 
-void Chunk::render(Shader &shader) {
+void Chunk::render_opaque(Shader &shader) {
     glm::mat4 model(1.0f);
 
     shader.set_matrix4fv("u_model", model);
 
     shader.set_vector3f("u_colour", utility::ColourUtility::get_high_precision_RGB(common::WHITE_RGB));
 
-    this->_mesh.render(this->_TOPOLOGY);
+    this->_opaque_mesh.render(this->_TOPOLOGY);
+}
+
+void Chunk::render_transparent(Shader &shader) {
+    glm::mat4 model(1.0f);
+
+    shader.set_matrix4fv("u_model", model);
+
+    shader.set_vector3f("u_colour", utility::ColourUtility::get_high_precision_RGB(common::WHITE_RGB));
+
+    this->_transparent_mesh.render(this->_TOPOLOGY);
 }
 
 int Chunk::get_voxel_id(int x, int y, int z) {
@@ -843,10 +1112,6 @@ bool Chunk::is_task_running(const ChunkTask &task) {
     return this->_running_tasks.load(std::memory_order_acquire) & static_cast<std::uint8_t>(task);
 }
 
-bool Chunk::can_run_task(const ChunkTask &task) {
-    return this->is_task_queued(task) && !this->is_task_running(task);
-}
-
 void Chunk::set_running_task(const ChunkTask &task) {
     this->clear_queued_task(task);
 
@@ -867,6 +1132,54 @@ bool Chunk::is_task_queue_empty() {
 
 void Chunk::clear_queued_task(const ChunkTask &task) {
     this->_queued_tasks.fetch_and(~static_cast<std::uint8_t>(task), std::memory_order_acq_rel);
+}
+
+bool Chunk::can_generate_terrain() {
+    return this->is_task_queued(ChunkTask::TERRAIN_GENERATION) && !this->is_task_running(ChunkTask::TERRAIN_GENERATION);
+}
+
+bool Chunk::can_propagate_sunlight() {
+    return this->is_task_queued(ChunkTask::LIGHT_PROPAGATION) && !this->is_task_running(ChunkTask::LIGHT_PROPAGATION);
+}
+
+bool Chunk::can_generate_mesh() {
+    return this->is_task_queued(ChunkTask::MESH_GENERATION) && !this->is_task_running(ChunkTask::MESH_GENERATION) && !this->is_task_queued(ChunkTask::LIGHT_PROPAGATION) && !this->is_task_running(ChunkTask::LIGHT_PROPAGATION) && !this->is_task_queued(ChunkTask::LIGHT_PROPAGATION) &&
+           !this->is_task_running(ChunkTask::LIGHT_PROPAGATION);
+}
+
+bool Chunk::can_upload_mesh() {
+    return this->is_task_queued(ChunkTask::MESH_UPLOAD) && !this->is_task_running(ChunkTask::MESH_UPLOAD) && !this->is_task_queued(ChunkTask::LIGHT_PROPAGATION) && !this->is_task_queued(ChunkTask::MESH_GENERATION) && !this->is_task_running(ChunkTask::LIGHT_PROPAGATION) &&
+           !this->is_task_running(ChunkTask::MESH_GENERATION);
+}
+
+void Chunk::process_dirty_neighbours_sunlight() {
+    std::uint8_t mask = this->_dirty_neighbours_sunlight.exchange(0U, std::memory_order_acq_rel);
+
+    std::uint8_t dirty_neighbours_sunlight = 0U;
+
+    while (mask) {
+        int face_type_index = std::countr_zero(mask);
+
+        mask &= (mask - 1U);
+
+        int nx = Face::I_NORMALS[face_type_index][0];
+        int ny = Face::I_NORMALS[face_type_index][1];
+        int nz = Face::I_NORMALS[face_type_index][2];
+
+        Chunk *neighbour_chunk = this->get_neighbour_chunk_local(this->local_x + nx, this->local_y + ny, this->local_z + nz);
+
+        if (neighbour_chunk == nullptr || !neighbour_chunk->is_state_set(ChunkState::TERRAIN_GENERATED)) {
+            dirty_neighbours_sunlight |= (1U << face_type_index);
+
+            continue;
+        }
+
+        neighbour_chunk->queue_tasks(ChunkTask::LIGHT_PROPAGATION);
+    }
+
+    if (dirty_neighbours_sunlight) {
+        this->_dirty_neighbours_sunlight.fetch_or(dirty_neighbours_sunlight, std::memory_order_acq_rel);
+    }
 }
 
 } // namespace engine::world

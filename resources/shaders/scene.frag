@@ -66,9 +66,7 @@ void main() {
     // o_colour = vec4(w_colour.rgb * f_ambient_occlusion * face_shade, w_colour.a);
 
     // INFO: Test lightmap
-    // vec4 t_colour = vec4(1.0f);
-
-    // o_colour = vec4(0.0f, t_colour.g * face_shade * f_sunlight, 0.0f, t_colour.a);
+    // o_colour = vec4(0.0f, face_shade * f_sunlight, 0.0f, 1.0f);
 
     // o_colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
 

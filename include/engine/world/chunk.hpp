@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/camera/camera.hpp"
+
 #include "engine/world/face.hpp"
 #include "engine/world/config.hpp"
 #include "engine/world/chunk_task.hpp"
@@ -11,7 +13,6 @@
 #include "engine/entity/aabb.hpp"
 
 #include "engine/shader/shader.hpp"
-#include <nlohmann/detail/conversions/to_chars.hpp>
 
 namespace engine::world {
 
@@ -33,11 +34,20 @@ class Chunk {
 
     Chunk(int global_x, int global_y, int global_z);
 
-    void generate(engine::world::World &world);
-    void generate_mesh();
+    void generate_terrain(engine::world::World &world);
+    bool can_generate_terrain();
+
     void propagate_sunlight(engine::world::World &world);
+    bool can_propagate_sunlight();
+
+    void generate_mesh(engine::camera::Camera &camera);
+    bool can_generate_mesh();
+
     void upload_mesh();
-    void render(engine::shader::Shader &shader);
+    bool can_upload_mesh();
+
+    void render_opaque(engine::shader::Shader &shader);
+    void render_transparent(engine::shader::Shader &shader);
 
     std::uint16_t &get_block(int x, int y, int z);
     std::uint16_t &get_block(int index);
@@ -52,13 +62,15 @@ class Chunk {
     void clear_state(const engine::world::ChunkState &state);
 
     bool is_task_running(const engine::world::ChunkTask &task);
-    bool can_run_task(const engine::world::ChunkTask &task);
+    bool is_no_task_running();
     void set_running_task(const engine::world::ChunkTask &task);
     void clear_running_task(const engine::world::ChunkTask &task);
 
     bool is_task_queued(const engine::world::ChunkTask &task);
     bool is_task_queue_empty();
     void clear_queued_task(const engine::world::ChunkTask &task);
+
+    void process_dirty_neighbours_sunlight();
 
     template <typename... ChunkTasks> void queue_tasks(ChunkTasks... tasks) {
         std::uint8_t mask = 0;
@@ -128,15 +140,19 @@ class Chunk {
     std::uint16_t _blocks[engine::world::config::CHUNK_SIZE3];
     std::uint16_t _lights[engine::world::config::CHUNK_SIZE3];
 
-    engine::model::Mesh _mesh;
+    engine::model::Mesh _opaque_mesh;
+    engine::model::Mesh _transparent_mesh;
 
     engine::entity::AABB _aabb;
 
-    std::vector<engine::world::Face> _faces;
+    std::vector<engine::world::Face> _opaque_faces;
+    std::vector<engine::world::Face> _transparent_faces;
 
     std::atomic<std::uint8_t> _state;
     std::atomic<std::uint8_t> _queued_tasks;
     std::atomic<std::uint8_t> _running_tasks;
+
+    std::atomic<std::uint8_t> _dirty_neighbours_sunlight;
 
     int get_voxel_id(int x, int y, int z);
 
@@ -148,7 +164,7 @@ class Chunk {
 
     void add_face(engine::world::BlockType &block_type, engine::world::FaceType &face_type, int block_x, int block_y, int block_z, int width, int height, int depth);
 
-    int get_ambient_occlusion(int face_type_index, int vertex_index, int x, int y, int z);
+    int get_ambient_occlusion(engine::world::BlockType &block_type, int face_type_index, int vertex_index, int x, int y, int z);
 
     std::uint16_t *get_neighbour_block(int global_x, int global_y, int global_z);
 

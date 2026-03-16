@@ -11,8 +11,6 @@
 #include "manager/display_manager.hpp"
 #include "manager/texture_manager.hpp"
 
-#include "common/constant.hpp"
-
 #include "logger/logger_macros.hpp"
 
 using namespace engine::world;
@@ -24,8 +22,6 @@ using namespace engine::entity;
 using namespace engine::camera;
 
 using namespace manager;
-
-using namespace common;
 
 namespace engine {
 
@@ -69,7 +65,7 @@ void Engine::update(GLFWwindow *window, float delta_time) {
 
     this->_cloud->update(camera->transform.position);
 
-    chunk_manager.process_chunks();
+    chunk_manager.process_chunks(player_camera);
 
     this->_time += delta_time;
 }
@@ -107,7 +103,7 @@ void Engine::render() {
 
     this->_sky->render(sky);
 
-    /* NOTE: Render voxels */
+    /* NOTE: Render OPAQUE voxels */
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -125,7 +121,16 @@ void Engine::render() {
     current_camera->upload_model_view_projection(scene);
     current_camera->upload_position(scene);
 
-    chunk_manager.render(scene);
+    chunk_manager.render_opaque(scene);
+
+    /* NOTE: Render TRANSPARENT voxels */
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    chunk_manager.render_transparent(scene);
 
     /* NOTE: Render clouds */
     glDisable(GL_CULL_FACE);
