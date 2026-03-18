@@ -161,6 +161,16 @@ void ChunkManager::process_chunks(Camera *camera) {
     }
 }
 
+void ChunkManager::render_water(Shader &shader) {
+    for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
+        Chunk *chunk = this->_world->chunks[chunk_id].get();
+
+        if (chunk->is_state_set(ChunkState::RENDERING)) {
+            chunk->render_water(shader);
+        }
+    }
+}
+
 void ChunkManager::render_opaque(Shader &shader) {
     for (std::uint32_t &chunk_id : this->_loaded_chunk_ids) {
         Chunk *chunk = this->_world->chunks[chunk_id].get();

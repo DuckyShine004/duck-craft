@@ -8,9 +8,6 @@ in vec3 f_fragment_position;
 in vec3 f_normal;
 in vec2 f_uv;
 
-in vec3 f_colour;
-
-in float f_ambient_occlusion;
 in float f_sunlight;
 
 flat in uint f_texture_id;
@@ -29,29 +26,13 @@ const float face_shades[6] = float[6](
         0.5f, 0.8f
     );
 
-float compute_fog(vec3 fragment_position, vec3 camera_position) {
-    const float FOG_START = 10.0f;
-    const float FOG_END = 50.0f;
-
-    float distance = length(fragment_position - camera_position);
-
-    float fog_factor = (FOG_END - distance) / (FOG_END - FOG_START);
-
-    return clamp(fog_factor, 0.0f, 1.0f);
-}
-
 void main() {
     float face_shade = face_shades[f_face_index];
 
     vec4 colour = texture(u_block_texture_array, vec3(f_uv, float(f_texture_id)));
 
-    // vec4 w_colour = vec4(1.0f);
-    // o_colour = vec4(f_colour, 1.0f);
-    // o_colour = vec4(w_colour.rgb * face_shade, w_colour.a);
-    // o_colour = vec4(w_colour.rgb * f_ambient_occlusion * face_shade, w_colour.a);
-
     // INFO: Test lightmap
-    // o_colour = vec4(0.0f, face_shade * f_sunlight, 0.0f, 1.0f);
+    // o_colour = vec4(0.0f, 0.0f, face_shade * f_sunlight, 1.0f);
 
     // INFO: Sharpness
 
@@ -59,14 +40,7 @@ void main() {
     // colour = vec4(colour.rgb * f_ambient_occlusion * face_shade, colour.a);
 
     // INFO: Final fragment
-    colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
-
-    // INFO: Fog
-    // vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
-    //
-    // float fog = compute_fog(f_fragment_position, u_camera_position);
-    //
-    // colour = vec4(mix(fog_colour, colour.rgb, fog), colour.a);
+    colour = vec4(colour.rgb * face_shade * f_sunlight, colour.a);
 
     /* INFO: Constrast */
     // float brightness = face_shade * f_sunlight;

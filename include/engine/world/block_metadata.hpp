@@ -11,11 +11,12 @@ struct BlockMetadata {
 
 // clang-format off
 inline constexpr engine::world::BlockMetadata BLOCK_METADATA[static_cast<std::size_t>(engine::world::BlockType::COUNT)] = {
-    {engine::world::BlockFlag::TRANSPARENT},
+    {engine::world::BlockFlag::TRANSPARENT | engine::world::BlockFlag::LIGHT_PASSTHROUGH},
     {engine::world::BlockFlag::NONE},
     {engine::world::BlockFlag::NONE},
     {engine::world::BlockFlag::NONE},
-    {engine::world::BlockFlag::TRANSPARENT},
+    {engine::world::BlockFlag::TRANSPARENT | engine::world::BlockFlag::LIGHT_PASSTHROUGH},
+    {engine::world::BlockFlag::NONE},
 };
 // clang-format on
 

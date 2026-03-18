@@ -1,0 +1,38 @@
+[
+  {
+    "name": "stone",
+    "id": 0,
+    "type": "block",
+    "faces": ["top", "bottom", "left", "right", "back", "front"],
+    "width": 16,
+    "height": 16,
+    "extension": "png"
+  },
+  {
+    "name": "grass",
+    "id": 1,
+    "type": "block",
+    "faces": ["top", "bottom", "left", "right", "back", "front"],
+    "width": 16,
+    "height": 16,
+    "extension": "png"
+  },
+  {
+    "name": "dirt",
+    "id": 2,
+    "type": "block",
+    "faces": ["top", "bottom", "left", "right", "back", "front"],
+    "width": 16,
+    "height": 16,
+    "extension": "png"
+  },
+  {
+    "name": "water",
+    "id": 0,
+    "type": "block",
+    "faces": ["top", "bottom", "left", "right", "back", "front"],
+    "width": 32,
+    "height": 32,
+    "extension": "png"
+  }
+]

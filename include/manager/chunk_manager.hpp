@@ -28,6 +28,7 @@ class ChunkManager final : public Manager {
 
     void process_chunks(engine::camera::Camera *camera);
 
+    void render_water(engine::shader::Shader &shader);
     void render_opaque(engine::shader::Shader &shader);
     void render_transparent(engine::shader::Shader &shader);
 

@@ -8,6 +8,7 @@ enum class BlockType {
     GRASS,
     DIRT,
     WATER,
+    SAND,
     COUNT,
 };
 

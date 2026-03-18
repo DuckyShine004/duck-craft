@@ -132,6 +132,27 @@ void Engine::render() {
 
     chunk_manager.render_transparent(scene);
 
+    /* NOTE: Render WATER */
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    Shader &water = shader_manager.get_shader("water");
+
+    water.use();
+
+    water.set_integer("u_block_texture_array", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texture_manager.get_texture_handle("block"));
+
+    current_camera->upload_model_view_projection(water);
+    current_camera->upload_position(water);
+
+    chunk_manager.render_water(water);
+
     /* NOTE: Render clouds */
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);

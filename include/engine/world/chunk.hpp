@@ -46,6 +46,7 @@ class Chunk {
     void upload_mesh();
     bool can_upload_mesh();
 
+    void render_water(engine::shader::Shader &shader);
     void render_opaque(engine::shader::Shader &shader);
     void render_transparent(engine::shader::Shader &shader);
 
@@ -140,11 +141,13 @@ class Chunk {
     std::uint16_t _blocks[engine::world::config::CHUNK_SIZE3];
     std::uint16_t _lights[engine::world::config::CHUNK_SIZE3];
 
+    engine::model::Mesh _water_mesh;
     engine::model::Mesh _opaque_mesh;
     engine::model::Mesh _transparent_mesh;
 
     engine::entity::AABB _aabb;
 
+    std::vector<engine::world::Face> _water_faces;
     std::vector<engine::world::Face> _opaque_faces;
     std::vector<engine::world::Face> _transparent_faces;
 
@@ -170,6 +173,8 @@ class Chunk {
 
     engine::world::Chunk *get_neighbour_chunk_local(int local_x, int local_y, int local_z);
 
+    std::uint8_t get_water_sunlight(int global_x, int global_y, int global_z);
+    std::uint8_t get_next_sunlight(std::uint8_t &sunlight, std::uint16_t &block, const engine::world::FaceType &face_type);
     std::uint8_t get_neighbour_sunlight(int global_x, int global_y, int global_z);
 
     void clear_mesh();

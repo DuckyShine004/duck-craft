@@ -69,7 +69,7 @@ void Chunk::generate_terrain(World &world) {
 
                 Block::set(block, BlockType::EMPTY);
 
-                if (dy == 10) {
+                if (dy <= 10) {
                     Block::set(block, BlockType::WATER);
                 }
 
@@ -77,10 +77,24 @@ void Chunk::generate_terrain(World &world) {
                     continue;
                 }
 
+                BlockType surface = BlockType::EMPTY;
+
+                if (dy >= height - 3 && height <= 13) {
+                    surface = BlockType::SAND;
+                }
+
                 if (dy == height) {
-                    Block::set(block, BlockType::GRASS);
+                    if (surface == BlockType::SAND) {
+                        Block::set(block, surface);
+                    } else {
+                        Block::set(block, BlockType::GRASS);
+                    }
                 } else if (dy < height && dy >= height - 3) {
-                    Block::set(block, BlockType::DIRT);
+                    if (surface == BlockType::SAND) {
+                        Block::set(block, surface);
+                    } else {
+                        Block::set(block, BlockType::DIRT);
+                    }
                 } else if (dy < height - 3) {
                     Block::set(block, BlockType::STONE);
                 }
@@ -112,7 +126,9 @@ void Chunk::propagate_sunlight(World &world) {
 
     std::copy(std::begin(this->_lights), std::end(this->_lights), std::begin(lights));
 
-    std::memset(this->_lights, 0U, sizeof(this->_lights));
+    /* NOTE: Resetting sometimes still creates some buggy behaviour if there is a data race, so far, definitely have reduced chances of collision, but no permanent solution yet */
+    // Therefore, it's probably better to use a previous stable state, i.e., calculate but never reset policy
+    // std::memset(this->_lights, 0U, sizeof(this->_lights));
 
     Chunk *top_chunk = this->get_neighbour_chunk_local(this->local_x, this->local_y + 1, this->local_z);
 
@@ -130,28 +146,59 @@ void Chunk::propagate_sunlight(World &world) {
     std::queue<LightNode> queue;
 
     // Top chunk seeding
+    // NOTE: WATER ATTENUATION SHOULD START < WATER HEIGHT, this means that fully exposed water should have 15
     for (int z = 0; z < config::CHUNK_SIZE; ++z) {
         for (int x = 0; x < config::CHUNK_SIZE; ++x) {
             std::uint8_t sunlight = 0U;
 
             if (is_top_chunk_loaded) {
-                std::uint8_t bottom_sunlight = Light::get_sunlight(top_chunk->get_light(x, 0, z));
+                int bottom_voxel_id = top_chunk->get_voxel_id(x, 0, z);
 
-                if (bottom_sunlight > 0U) {
-                    int top_voxel_id = this->get_voxel_id(x, config::CHUNK_SIZE - 1, z);
-
-                    std::uint16_t &top_block = this->_blocks[top_voxel_id];
-
-                    std::uint8_t top_sunlight = Light::get_sunlight(this->_lights[top_voxel_id]);
-
-                    if (Block::get_type(top_block) == BlockType::EMPTY && top_sunlight < bottom_sunlight) {
-                        Light::set_sunlight(this->_lights[top_voxel_id], bottom_sunlight);
-
-                        queue.emplace(top_voxel_id);
-                    }
+                // If bottom block of top chunk is solid, we skip
+                if (!Block::has_flag(top_chunk->get_block(bottom_voxel_id), BlockFlag::TRANSPARENT)) {
+                    continue;
                 }
+
+                std::uint8_t bottom_sunlight = Light::get_sunlight(top_chunk->get_light(bottom_voxel_id));
+
+                // If the bottom sunlight of top chunk is 0, we skip
+                if (bottom_sunlight == 0U) {
+                    continue;
+                }
+
+                int top_voxel_id = this->get_voxel_id(x, config::CHUNK_SIZE - 1, z);
+
+                std::uint16_t &top_block = this->_blocks[top_voxel_id];
+
+                // If the top block is solid, we skip
+                if (!Block::has_flag(this->_blocks[top_voxel_id], BlockFlag::TRANSPARENT)) {
+                    continue;
+                }
+
+                std::uint8_t top_sunlight = Light::get_sunlight(this->_lights[top_voxel_id]);
+
+                // If the top sunlight of current chunk >= bottom sunlight of top chunk, we cannot flood from top chunk
+                if (top_sunlight >= bottom_sunlight) {
+                    continue;
+                }
+
+                // If block is not solid and direct sunlight from bottom of top chunk > current chunk top light, then
+                Light::set_sunlight(this->_lights[top_voxel_id], bottom_sunlight);
+
+                queue.emplace(top_voxel_id);
             } else {
+                // // If the top of the current chunk is <= water height, then we estimate by depth
+                // if (this->global_y + config::CHUNK_SIZE - 1 <= 10) {
+                //     // 10 - block_y
+                //     int depth = std::min(std::max(0, 10 - (this->global_y + config::CHUNK_SIZE - 1)), 15);
+                //
+                //     sunlight = 15U - depth;
+                // } else if (this->global_y + config::CHUNK_SIZE - 1 > height_map->get_height(x, z)) {
+                //     // Second case is that we are above water, and top of current chunk is > height map
+                //     sunlight = 15U;
+                // }
                 if (this->global_y + config::CHUNK_SIZE - 1 > height_map->get_height(x, z)) {
+                    // Second case is that we are above water, and top of current chunk is > height map
                     sunlight = 15U;
                 }
             }
@@ -165,7 +212,7 @@ void Chunk::propagate_sunlight(World &world) {
 
                 std::uint16_t &block = this->_blocks[voxel_id];
 
-                if (Block::get_type(block) > BlockType::EMPTY) {
+                if (!Block::has_flag(block, BlockFlag::TRANSPARENT)) {
                     break;
                 }
 
@@ -174,6 +221,11 @@ void Chunk::propagate_sunlight(World &world) {
                 Light::set_sunlight(light, sunlight);
 
                 queue.emplace(voxel_id);
+
+                // If we are in water, we set water sunlight, then we break, and let bfs do the attenuation
+                if (Block::get_type(block) == BlockType::WATER) {
+                    break;
+                }
             }
         }
     }
@@ -196,11 +248,11 @@ void Chunk::propagate_sunlight(World &world) {
                 int voxel_id = this->get_voxel_id(x, y, z);
 
                 // If the current block is solid, then we skip
-                if (Block::get_type(this->_blocks[voxel_id]) > BlockType::EMPTY) {
+                if (!Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
                     continue;
                 }
 
-                // Check if we emplace voxel x,y,z in queue by checking sunlight at neighbour.(x,y,neighbour_z)
+                // Check if we emplace voxel x,y,z in queue by checking sunlight at neighbour
                 int neighbour_voxel_id = neighbour_chunk->get_voxel_id(x, y, neighbour_z);
 
                 std::uint8_t neighbour_sunlight = Light::get_sunlight(neighbour_chunk->get_light(neighbour_voxel_id));
@@ -211,7 +263,7 @@ void Chunk::propagate_sunlight(World &world) {
                 }
 
                 // If neighbour block is solid, we skip
-                if (Block::get_type(neighbour_chunk->get_block(neighbour_voxel_id)) > BlockType::EMPTY) {
+                if (!Block::has_flag(neighbour_chunk->get_block(neighbour_voxel_id), BlockFlag::TRANSPARENT)) {
                     continue;
                 }
 
@@ -254,11 +306,11 @@ void Chunk::propagate_sunlight(World &world) {
                 int voxel_id = this->get_voxel_id(x, y, z);
 
                 // If the current block is solid, then we skip
-                if (Block::get_type(this->_blocks[voxel_id]) > BlockType::EMPTY) {
+                if (!Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
                     continue;
                 }
 
-                // Check if we emplace voxel x,y,z in queue by checking sunlight at neighbour.(x,y,neighbour_z)
+                // Check if we emplace voxel x,y,z in queue by checking sunlight at neighbour
                 int neighbour_voxel_id = neighbour_chunk->get_voxel_id(neighbour_x, y, z);
 
                 std::uint8_t neighbour_sunlight = Light::get_sunlight(neighbour_chunk->get_light(neighbour_voxel_id));
@@ -269,7 +321,7 @@ void Chunk::propagate_sunlight(World &world) {
                 }
 
                 // If neighbour block is solid, we skip
-                if (Block::get_type(neighbour_chunk->get_block(neighbour_voxel_id)) > BlockType::EMPTY) {
+                if (!Block::has_flag(neighbour_chunk->get_block(neighbour_voxel_id), BlockFlag::TRANSPARENT)) {
                     continue;
                 }
 
@@ -303,6 +355,8 @@ void Chunk::propagate_sunlight(World &world) {
         int y = (index >> config::CHUNK_SIZE_BITS) & (config::CHUNK_SIZE - 1);
         int z = (index >> config::CHUNK_SIZE_BITS2) & (config::CHUNK_SIZE - 1);
 
+        std::uint16_t &block = this->_blocks[index];
+
         std::uint8_t sunlight = Light::get_sunlight(this->get_light(index));
 
         queue.pop();
@@ -330,21 +384,27 @@ void Chunk::propagate_sunlight(World &world) {
             int neighbour_voxel_id = this->get_voxel_id(neighbour_x, neighbour_y, neighbour_z);
 
             std::uint16_t &neighbour_block = this->get_block(neighbour_voxel_id);
-            std::uint16_t &neighbour_light = this->get_light(neighbour_voxel_id);
 
-            if (Block::get_type(neighbour_block) > BlockType::EMPTY) {
+            // If block is solid, we skip
+            if (!Block::has_flag(neighbour_block, BlockFlag::TRANSPARENT)) {
                 continue;
             }
 
             std::uint8_t next_sunlight = sunlight - 1U;
 
+            // Check if we are traversing down and we have direct sunlight
             if (face_type == FaceType::BOTTOM && sunlight == 15U) {
-                next_sunlight = sunlight;
+                // If the current block is not water, then we can attenuate the light
+                if (Block::get_type(block) != BlockType::WATER) {
+                    next_sunlight = sunlight;
+                }
             }
 
             if (next_sunlight == 0U) {
                 continue;
             }
+
+            std::uint16_t &neighbour_light = this->get_light(neighbour_voxel_id);
 
             if (Light::get_sunlight(neighbour_light) >= next_sunlight) {
                 continue;
@@ -467,7 +527,7 @@ void Chunk::generate_mesh(Camera &camera) {
         float depth_a = glm::dot(face_a_centre - camera_position, camera.get_front());
         float depth_b = glm::dot(face_b_centre - camera_position, camera.get_front());
 
-        return depth_a < depth_b;
+        return depth_a > depth_b;
     });
 
     index_offset = 0;
@@ -478,12 +538,31 @@ void Chunk::generate_mesh(Camera &camera) {
         index_offset += 4;
     }
 
+    std::sort(this->_water_faces.begin(), this->_water_faces.end(), [&](const auto &face_a, const auto &face_b) {
+        glm::vec3 face_a_centre = glm::vec3(face_a.x + face_a.width, face_a.y + face_a.height, face_a.z + face_a.depth) / 2.0f;
+        glm::vec3 face_b_centre = glm::vec3(face_b.x + face_b.width, face_b.y + face_b.height, face_b.z + face_b.depth) / 2.0f;
+
+        float depth_a = glm::dot(face_a_centre - camera_position, camera.get_front());
+        float depth_b = glm::dot(face_b_centre - camera_position, camera.get_front());
+
+        return depth_a > depth_b;
+    });
+
+    index_offset = 0;
+
+    for (Face &face : this->_water_faces) {
+        face.add_to_mesh(this->_water_mesh, index_offset);
+
+        index_offset += 4;
+    }
+
     this->clear_running_task(ChunkTask::MESH_GENERATION);
 
     this->queue_tasks(ChunkTask::MESH_UPLOAD);
 }
 
 void Chunk::upload_mesh() {
+    this->_water_mesh.upload();
     this->_opaque_mesh.upload();
     this->_transparent_mesh.upload();
 
@@ -636,7 +715,9 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 int voxel_id = this->get_voxel_id(x, y, z);
 
-                if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
+                if (block_type == BlockType::WATER) {
+                    this->_water_faces.emplace_back(std::move(face));
+                } else if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
                     this->_transparent_faces.emplace_back(std::move(face));
                 } else {
                     this->_opaque_faces.emplace_back(std::move(face));
@@ -653,7 +734,11 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
     int ny = Face::I_NORMALS[face_type_index][1];
     int nz = Face::I_NORMALS[face_type_index][2];
 
-    for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+    for (int y = config::CHUNK_SIZE - 1; y >= 0; --y) {
+        if (block_type == BlockType::WATER && this->global_y + y < 10) {
+            break;
+        }
+
         std::uint32_t block_masks[config::CHUNK_SIZE];
 
         std::uint8_t ambient_occlusion_masks[config::CHUNK_SIZE][config::CHUNK_SIZE];
@@ -673,8 +758,8 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
                 std::uint16_t *adjacent_block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
                 // If the adjacent block is loaded
-                if (adjacent_block != nullptr) {
-                    // If the adjacent block is not empty
+                if (block_type != BlockType::WATER && adjacent_block != nullptr) {
+                    // If the adjacent block is not empty or is not transparent
                     if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
                         continue;
                     }
@@ -694,7 +779,13 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 std::uint8_t ambient_occlusion_mask = ambient_occlusion_masks[z][x];
 
-                std::uint8_t sunlight = this->get_neighbour_sunlight(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
+                std::uint8_t sunlight = 0U;
+
+                if (block_type == BlockType::WATER) {
+                    sunlight = this->get_water_sunlight(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
+                } else {
+                    sunlight = this->get_neighbour_sunlight(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
+                }
 
                 int width = 1;
 
@@ -707,7 +798,13 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
                     int adjacent_block_y = this->global_y + y + ny;
                     int adjacent_block_z = this->global_z + z + nz;
 
-                    std::uint8_t adjacent_sunlight = this->get_neighbour_sunlight(adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                    std::uint8_t adjacent_sunlight = 0U;
+
+                    if (block_type == BlockType::WATER) {
+                        adjacent_sunlight = this->get_water_sunlight(adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                    } else {
+                        adjacent_sunlight = this->get_neighbour_sunlight(adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                    }
 
                     if (adjacent_sunlight != sunlight) {
                         break;
@@ -742,7 +839,13 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
                         int adjacent_block_y = this->global_y + y + ny;
                         int adjacent_block_z = this->global_z + z + depth + nz;
 
-                        std::uint8_t adjacent_sunlight = this->get_neighbour_sunlight(adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                        std::uint8_t adjacent_sunlight = 0U;
+
+                        if (block_type == BlockType::WATER) {
+                            adjacent_sunlight = this->get_water_sunlight(adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                        } else {
+                            adjacent_sunlight = this->get_neighbour_sunlight(adjacent_block_x, adjacent_block_y, adjacent_block_z);
+                        }
 
                         if (adjacent_sunlight != sunlight) {
                             can_merge = false;
@@ -774,7 +877,9 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 int voxel_id = this->get_voxel_id(x, y, z);
 
-                if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
+                if (block_type == BlockType::WATER) {
+                    this->_water_faces.emplace_back(std::move(face));
+                } else if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
                     this->_transparent_faces.emplace_back(std::move(face));
                 } else {
                     this->_opaque_faces.emplace_back(std::move(face));
@@ -912,7 +1017,9 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 int voxel_id = this->get_voxel_id(x, y, z);
 
-                if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
+                if (block_type == BlockType::WATER) {
+                    this->_water_faces.emplace_back(std::move(face));
+                } else if (Block::has_flag(this->_blocks[voxel_id], BlockFlag::TRANSPARENT)) {
                     this->_transparent_faces.emplace_back(std::move(face));
                 } else {
                     this->_opaque_faces.emplace_back(std::move(face));
@@ -923,9 +1030,11 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type, int textu
 }
 
 void Chunk::clear_mesh() {
+    this->_water_mesh.clear();
     this->_opaque_mesh.clear();
     this->_transparent_mesh.clear();
 
+    this->_water_faces.clear();
     this->_opaque_faces.clear();
     this->_transparent_faces.clear();
 }
@@ -950,7 +1059,7 @@ int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int
             continue;
         }
 
-        side_values[side_index] = (Block::get_type(*side_block) == BlockType::EMPTY) ? 0 : 1;
+        side_values[side_index] = (Block::get_type(*side_block) == BlockType::EMPTY || Block::get_type(*side_block) == BlockType::WATER) ? 0 : 1;
     }
 
     if (side_values[0] && side_values[1]) {
@@ -958,6 +1067,16 @@ int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int
     }
 
     return 3 - (side_values[0] + side_values[1] + side_values[2]);
+}
+
+void Chunk::render_water(Shader &shader) {
+    glm::mat4 model(1.0f);
+
+    shader.set_matrix4fv("u_model", model);
+
+    shader.set_vector3f("u_colour", utility::ColourUtility::get_high_precision_RGB(common::WHITE_RGB));
+
+    this->_water_mesh.render(this->_TOPOLOGY);
 }
 
 void Chunk::render_opaque(Shader &shader) {
@@ -1050,6 +1169,10 @@ Chunk *Chunk::get_neighbour_chunk_local(int local_x, int local_y, int local_z) {
     int neighbour_id = offset_x + offset_y * 3 + offset_z * 9;
 
     return this->neighbours[neighbour_id];
+}
+
+std::uint8_t Chunk::get_water_sunlight(int global_x, int global_y, int global_z) {
+    return this->get_neighbour_sunlight(global_x, global_y - 1, global_z);
 }
 
 std::uint8_t Chunk::get_neighbour_sunlight(int global_x, int global_y, int global_z) {
