@@ -71,6 +71,8 @@ std::string FileUtility::get_shader_file(const std::string &path) {
         std::terminate();
     }
 
+    std::string parent_directory = FileUtility::get_parent_directory(path);
+
     std::string token;
 
     std::stringstream buffer;
@@ -87,16 +89,24 @@ std::string FileUtility::get_shader_file(const std::string &path) {
 
             std::string include_path = StringUtility::slice_string(include_path_raw, 1, include_path_raw.length() - 2);
 
-            if (includes.find(include_path) != includes.end()) {
-                LOG_WARN("Skipping include '{}' at line {}", include_path, line);
+            std::string full_include_path = parent_directory + '/' + include_path;
+
+            if (includes.find(full_include_path) != includes.end()) {
+                LOG_WARN("Skipping include '{}' at line {}", full_include_path, line);
                 continue;
             }
 
-            std::string include_source = FileUtility::get_file_to_string(include_path);
+            std::string include_source = FileUtility::get_file_to_string(full_include_path);
 
-            includes.insert(include_path);
+            includes.insert(full_include_path);
 
             buffer << include_source << '\n';
+        } else if (token.starts_with("#extension")) {
+            std::string extension = StringUtility::split_string(token, ' ')[1];
+
+            if (extension == "GL_GOOGLE_include_directive") {
+                continue;
+            }
         } else {
             buffer << token << '\n';
         }

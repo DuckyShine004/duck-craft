@@ -21,8 +21,6 @@ class ShaderManager final : public Manager {
     engine::shader::Shader &get_active_shader();
 
   private:
-    static inline constexpr const char *_DIRECTORY = "resources/shaders/";
-
     static inline constexpr const char *_VERTEX_SHADER_EXTENSION = ".vert";
     static inline constexpr const char *_FRAGMENT_SHADER_EXTENSION = ".frag";
 

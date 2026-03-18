@@ -1,7 +1,9 @@
 #version 330 core
 
-#include "resources/shaders/common/fog.glsl"
-#include "resources/shaders/common/colour.glsl"
+#extension GL_GOOGLE_include_directive : require
+
+#include "common/fog.glsl"
+#include "common/colour.glsl"
 
 in vec3 f_fragment_position;
 

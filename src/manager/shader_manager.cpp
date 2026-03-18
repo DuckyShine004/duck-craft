@@ -3,7 +3,6 @@
 #include "utility/file_utility.hpp"
 
 #include "logger/logger_macros.hpp"
-#include "utility/string_utility.hpp"
 
 using namespace engine::shader;
 
@@ -23,7 +22,7 @@ ShaderManager &ShaderManager::get_instance() {
 }
 
 void ShaderManager::initialise() {
-    std::vector<std::string> paths = FileUtility::get_files_in_directory(this->_DIRECTORY);
+    std::vector<std::string> paths = FileUtility::get_files_in_directory("resources/shaders/");
 
     for (const std::string &path : paths) {
         this->add_shader(path);
