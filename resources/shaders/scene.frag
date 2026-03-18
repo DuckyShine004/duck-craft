@@ -19,6 +19,9 @@ flat in uint f_face_index;
 
 uniform sampler2DArray u_block_texture_array;
 
+uniform float u_gamma;
+uniform float u_saturation;
+
 uniform vec3 u_camera_position;
 
 out vec4 o_colour;
@@ -76,7 +79,7 @@ void main() {
     // colour = vec4(constrast * (colour.rgb - vec3(0.5f)) + vec3(0.5f) + vec3(brightness), colour.a);
 
     /* INFO: Saturation */
-    colour = compute_saturation(colour);
+    colour = compute_saturation(colour, u_saturation);
 
     /* INFO: Volumetric Fog */
     vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
@@ -86,7 +89,7 @@ void main() {
     colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
 
     /* INFO: Gamma Correction */
-    colour = compute_gamma_correction(colour);
+    colour = compute_gamma_correction(colour, u_gamma);
 
     o_colour = colour;
 }

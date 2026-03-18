@@ -2,6 +2,10 @@
 
 #include "external/glad/glad.h"
 
+#include "external/imgui/imgui.h"
+#include "external/imgui/imgui_impl_glfw.h"
+#include "external/imgui/imgui_impl_opengl3.h"
+
 #include "application/application.hpp"
 
 #include "engine/engine.hpp"
@@ -23,7 +27,7 @@ using namespace manager;
 
 namespace application {
 
-Application::Application() : _last_time(0.0f) {
+Application::Application() : _last_time(0.0f), _is_mouse_captured(false) {
 }
 
 Application::~Application() {
@@ -78,6 +82,20 @@ bool Application::initialise() {
 
     this->_window = window;
 
+    IMGUI_CHECKVERSION();
+
+    ImGui::CreateContext();
+
+    ImGuiIO &io = ImGui::GetIO();
+
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+
     return true;
 }
 
@@ -109,8 +127,6 @@ void Application::run() {
         glfwSwapBuffers(this->_window);
         glfwPollEvents();
     }
-
-    this->on_cleanup();
 }
 
 void Application::update(Engine &engine) {
@@ -132,7 +148,17 @@ void Application::render(Engine &engine) {
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    ImGui_ImplOpenGL3_NewFrame();
+
+    ImGui_ImplGlfw_NewFrame();
+
+    ImGui::NewFrame();
+
     engine.render();
+
+    ImGui::Render();
+
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 void Application::on_key_press(GLFWwindow *window, int key, int scanmode, int action, int mods) {
@@ -154,6 +180,18 @@ void Application::handle_key_press(GLFWwindow *window, int key, int scanmode, in
         } else {
             glfwSetInputMode(this->_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
+        // this->_is_mouse_captured = !this->_is_mouse_captured;
+        // if (this->_is_mouse_captured) {
+        //     glfwSetInputMode(this->_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        //
+        //     int width;
+        //     int height;
+        //
+        //     glfwGetWindowSize(this->_window, &width, &height);
+        //     glfwSetCursorPos(this->_window, width * 0.5, height * 0.5);
+        // } else {
+        //     glfwSetInputMode(this->_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        // }
     }
 
     if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
@@ -180,6 +218,10 @@ void Application::on_cursor(GLFWwindow *window, double x, double y) {
 }
 
 void Application::handle_cursor(GLFWwindow *window, double x, double y) {
+    // if (!this->_is_mouse_captured) {
+    //     return;
+    // }
+
     CameraManager &camera_manager = CameraManager::get_instance();
 
     camera::Camera *camera = CameraManager::get_instance().get_camera();
@@ -199,6 +241,10 @@ void Application::on_scroll(GLFWwindow *window, double x, double y) {
 }
 
 void Application::handle_scroll(GLFWwindow *window, double x, double y) {
+    // if (!this->_is_mouse_captured) {
+    //     return;
+    // }
+
     CameraManager &camera_manager = CameraManager::get_instance();
 
     camera::Camera *camera = CameraManager::get_instance().get_camera();
@@ -212,6 +258,12 @@ void Application::handle_scroll(GLFWwindow *window, double x, double y) {
 }
 
 void Application::on_cleanup() {
+    ImGui_ImplOpenGL3_Shutdown();
+
+    ImGui_ImplGlfw_Shutdown();
+
+    ImGui::DestroyContext();
+
     if (this->_window != nullptr) {
         glfwDestroyWindow(this->_window);
 

@@ -25,6 +25,8 @@ class Application {
 
     float _last_time;
 
+    bool _is_mouse_captured;
+
     static void on_key_press(GLFWwindow *window, int key, int scanmode, int action, int mods);
 
     static void on_window_resize(GLFWwindow *window, int width, int height);

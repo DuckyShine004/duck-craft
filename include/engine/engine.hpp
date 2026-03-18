@@ -7,6 +7,8 @@
 
 #include "engine/threading/thread_pool.hpp"
 
+#include "core/setting/setting.hpp"
+
 namespace engine {
 
 class Engine {
@@ -18,12 +20,14 @@ class Engine {
     void render();
 
   private:
-    float _time;
-
     std::unique_ptr<engine::world::Sky> _sky;
     std::unique_ptr<engine::world::Cloud> _cloud;
 
     engine::threading::ThreadPool _thread_pool;
+
+    float _time;
+
+    std::unique_ptr<core::setting::Setting> _setting;
 };
 
 } // namespace engine
