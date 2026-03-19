@@ -203,7 +203,7 @@ void Engine::render() {
     /* NOTE: Render TRANSPARENT voxels */
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
+    glDepthMask(GL_TRUE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -267,27 +267,6 @@ void Engine::render() {
 
         camera->get_frustum().render(scene);
     }
-
-    // if (ImGui::Begin("Engine")) {
-    //     if (ImGui::BeginTable("post_processing_table", 2, ImGuiTableFlags_BordersInnerV)) {
-    //         ImGui::TableNextRow();
-    //         ImGui::TableSetColumnIndex(0);
-    //         ImGui::TextUnformatted("Saturation");
-    //         ImGui::TableSetColumnIndex(1);
-    //         ImGui::SetNextItemWidth(-FLT_MIN);
-    //         ImGui::SliderFloat("##saturation", &this->_saturation, 0.0f, 10.0f, "%.2f");
-    //
-    //         ImGui::TableNextRow();
-    //         ImGui::TableSetColumnIndex(0);
-    //         ImGui::TextUnformatted("Gamma");
-    //         ImGui::TableSetColumnIndex(1);
-    //         ImGui::SetNextItemWidth(-FLT_MIN);
-    //         ImGui::SliderFloat("##gamma", &this->_gamma, 0.01f, 10.0f, "%.2f");
-    //
-    //         ImGui::EndTable();
-    //     }
-    //     ImGui::End();
-    // }
 }
 
 } // namespace engine

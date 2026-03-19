@@ -47,6 +47,13 @@ void main() {
     // INFO: Final fragment
     colour = vec4(colour.rgb * face_shade * f_sunlight, colour.a);
 
+    /* INFO: Volumetric Fog */
+    vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
+
+    vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
+
+    colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
+
     /* INFO: Constrast */
     // float brightness = face_shade * f_sunlight;
     //
@@ -56,13 +63,6 @@ void main() {
 
     /* INFO: Saturation */
     colour = compute_saturation(colour, u_saturation);
-
-    /* INFO: Volumetric Fog */
-    vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
-
-    vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
-
-    colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
 
     /* INFO: Gamma Correction */
     colour = compute_gamma_correction(colour, u_gamma);

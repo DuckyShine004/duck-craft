@@ -1,3 +1,4 @@
+#include "engine/world/config.hpp"
 #include "engine/world/generator.hpp"
 
 #include "logger/logger_macros.hpp"
@@ -83,7 +84,7 @@ void Generator::initialise_cave_noise() {
 }
 
 int Generator::get_height(int x, int y) {
-    int height = this->_height_noise->GenSingle2D(x, y, this->_SEED);
+    int height = this->_height_noise->GenSingle2D(x, y, config::SEED);
 
     // LOG_INFO("Height: {}", height);
 
@@ -92,12 +93,98 @@ int Generator::get_height(int x, int y) {
 
 // NOTE: Meaning we simply skip (or replace with empty block)
 bool Generator::is_cave(int x, int y, int z) {
-    float noise = this->_cave_noise->GenSingle3D(x, y, z, this->_SEED);
+    float noise = this->_cave_noise->GenSingle3D(x, y, z, config::SEED);
 
     constexpr float iso = 0.15f;
     constexpr float width = 0.08f;
 
     return std::abs(noise - iso) < width;
+}
+
+bool Generator::is_grass(int x, int y, int z) {
+    std::uint32_t seed = this->get_seed(x, y, z, config::SEED);
+
+    this->_rng.seed(seed);
+
+    std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+
+    float threshold = distribution(this->_rng);
+
+    return threshold <= 0.2f;
+}
+
+BlockType Generator::get_grass(int x, int y, int z) {
+    std::uint32_t seed = this->get_seed(x, y, z, config::SEED ^ 0xA5A5A5A5u);
+
+    this->_rng.seed(seed);
+
+    constexpr BlockType flower_types[2] = {
+        BlockType::SHORT_GRASS,
+        BlockType::TALL_GRASS,
+    };
+
+    std::uniform_int_distribution<int> distribution(0, 1);
+
+    int index = distribution(this->_rng);
+
+    return flower_types[index];
+}
+
+bool Generator::is_flower(int x, int y, int z) {
+    std::uint32_t seed = this->get_seed(x, y, z, config::SEED);
+
+    this->_rng.seed(seed);
+
+    std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+
+    float threshold = distribution(this->_rng);
+
+    return threshold <= 0.025f;
+}
+
+BlockType Generator::get_flower(int x, int y, int z) {
+    std::uint32_t seed = this->get_seed(x, y, z, config::SEED ^ 0xA5A5A5A5u);
+
+    this->_rng.seed(seed);
+
+    constexpr BlockType flower_types[2] = {
+        BlockType::DANDELION,
+        BlockType::ROSE,
+    };
+
+    std::uniform_int_distribution<int> distribution(0, 1);
+
+    int index = distribution(this->_rng);
+
+    return flower_types[index];
+}
+
+std::uint32_t Generator::get_seed(int x, int y, int z, std::uint32_t seed) {
+    // std::uint32_t seed = config::SEED;
+    //
+    // std::hash<int> hash_fn;
+    //
+    // std::uint32_t hx = static_cast<std::uint32_t>(hash_fn(x));
+    // std::uint32_t hy = static_cast<std::uint32_t>(hash_fn(y));
+    // std::uint32_t hz = static_cast<std::uint32_t>(hash_fn(z));
+    //
+    // seed ^= hx;
+    // seed ^= hy;
+    // seed ^= hz;
+    //
+    // return seed;
+    std::uint32_t h = seed;
+    h ^= static_cast<std::uint32_t>(x) * 0x9E3779B1u;
+    h ^= static_cast<std::uint32_t>(y) * 0x85EBCA77u;
+    h ^= static_cast<std::uint32_t>(z) * 0xC2B2AE3Du;
+
+    h ^= h >> 16;
+    h *= 0x85EBCA6Bu;
+    h ^= h >> 13;
+    h *= 0xC2B2AE35u;
+    h ^= h >> 16;
+
+    return h;
 }
 
 } // namespace engine::world

@@ -13,17 +13,24 @@
 #include "engine/world/block.hpp"
 #include "engine/world/light.hpp"
 
+#include "engine/model/vertex.hpp"
+
+#include "utility/math_utility.hpp"
 #include "utility/colour_utility.hpp"
 
 #include "common/constant.hpp"
 
 #include "logger/logger_macros.hpp"
 
+using namespace engine::model;
+
 using namespace engine::camera;
 
 using namespace engine::shader;
 
 using namespace engine::entity;
+
+using namespace utility;
 
 namespace engine::world {
 
@@ -75,6 +82,18 @@ void Chunk::generate_terrain(World &world) {
 
                 if (world.generator->is_cave(dx, dy, dz)) {
                     continue;
+                }
+
+                if (y - 1 >= 0 && Block::get_type(this->_blocks[this->get_voxel_id(x, y - 1, z)]) == BlockType::GRASS) {
+                    if (world.generator->is_grass(dx, dy, dz)) {
+                        Block::set(block, world.generator->get_grass(dx, dy, dz));
+                        continue;
+                    }
+
+                    if (world.generator->is_flower(dx, dy, dz)) {
+                        Block::set(block, world.generator->get_flower(dx, dy, dz));
+                        continue;
+                    }
                 }
 
                 BlockType surface = BlockType::EMPTY;
@@ -187,18 +206,8 @@ void Chunk::propagate_sunlight(World &world) {
 
                 queue.emplace(top_voxel_id);
             } else {
-                // // If the top of the current chunk is <= water height, then we estimate by depth
-                // if (this->global_y + config::CHUNK_SIZE - 1 <= 10) {
-                //     // 10 - block_y
-                //     int depth = std::min(std::max(0, 10 - (this->global_y + config::CHUNK_SIZE - 1)), 15);
-                //
-                //     sunlight = 15U - depth;
-                // } else if (this->global_y + config::CHUNK_SIZE - 1 > height_map->get_height(x, z)) {
-                //     // Second case is that we are above water, and top of current chunk is > height map
-                //     sunlight = 15U;
-                // }
+                // If we are above the height map then we have direct sunlight,
                 if (this->global_y + config::CHUNK_SIZE - 1 > height_map->get_height(x, z)) {
-                    // Second case is that we are above water, and top of current chunk is > height map
                     sunlight = 15U;
                 }
             }
@@ -506,7 +515,64 @@ void Chunk::generate_mesh(Camera &camera) {
 
             int texture_id = (block_type_index - 1) * 6 + face_type_index;
 
-            this->merge_faces(block_type, face_type, texture_id);
+            if (block_type == BlockType::ROSE || block_type == BlockType::DANDELION || block_type == BlockType::SHORT_GRASS || block_type == BlockType::TALL_GRASS) {
+                for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+                    for (int y = 0; y < config::CHUNK_SIZE; ++y) {
+                        for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+                            int voxel_id = this->get_voxel_id(x, y, z);
+
+                            std::uint16_t &block = this->_blocks[voxel_id];
+
+                            if (Block::get_type(block) != block_type) {
+                                continue;
+                            }
+
+                            int voxel_x = this->global_x + x;
+                            int voxel_y = this->global_y + y;
+                            int voxel_z = this->global_z + z;
+
+                            float width = 1.0f;
+                            float height = 1.0f;
+                            float depth = 1.0f;
+
+                            if (block_type == BlockType::SHORT_GRASS) {
+                                width = 0.8f;
+                                height = 0.8f;
+                                depth = 0.8f;
+                            }
+
+                            float min_x = voxel_x + (1.0f - width) * 0.5f;
+                            float max_x = voxel_x + (1.0f + width) * 0.5f;
+
+                            float min_z = voxel_z + (1.0f - depth) * 0.5f;
+                            float max_z = voxel_z + (1.0f + depth) * 0.5f;
+
+                            float min_y = voxel_y;
+                            float max_y = voxel_y + height;
+
+                            Vertex a0(min_x, min_y, min_z, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, texture_id);
+                            Vertex a1(max_x, min_y, max_z, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, texture_id);
+                            Vertex a2(max_x, max_y, max_z, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, texture_id);
+                            Vertex a3(min_x, max_y, min_z, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, texture_id);
+
+                            Vertex b0(max_x, min_y, min_z, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, texture_id);
+                            Vertex b1(min_x, min_y, max_z, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, texture_id);
+                            Vertex b2(min_x, max_y, max_z, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, texture_id);
+                            Vertex b3(max_x, max_y, min_z, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, texture_id);
+
+                            std::uint8_t sunlight = Light::get_sunlight(this->_lights[voxel_id]);
+
+                            Face face1 = Face::make_custom(block_type, FaceType::FRONT, a0, a1, a2, a3, sunlight, texture_id);
+                            Face face2 = Face::make_custom(block_type, FaceType::FRONT, b0, b1, b2, b3, sunlight, texture_id);
+
+                            this->_transparent_faces.emplace_back(std::move(face1));
+                            this->_transparent_faces.emplace_back(std::move(face2));
+                        }
+                    }
+                }
+            } else {
+                this->merge_faces(block_type, face_type, texture_id);
+            }
         }
     }
 
@@ -1040,7 +1106,7 @@ void Chunk::clear_mesh() {
 }
 
 int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int vertex_index, int x, int y, int z) {
-    if (block_type == BlockType::WATER) {
+    if (Block::has_flag(this->_blocks[this->get_voxel_id(x, y, z)], BlockFlag::TRANSPARENT)) {
         return 3;
     }
 
@@ -1059,7 +1125,7 @@ int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int
             continue;
         }
 
-        side_values[side_index] = (Block::get_type(*side_block) == BlockType::EMPTY || Block::get_type(*side_block) == BlockType::WATER) ? 0 : 1;
+        side_values[side_index] = (Block::has_flag(*side_block, BlockFlag::TRANSPARENT)) ? 0 : 1;
     }
 
     if (side_values[0] && side_values[1]) {

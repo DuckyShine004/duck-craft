@@ -11,7 +11,10 @@ using namespace engine::model;
 
 namespace engine::world {
 
-Face::Face(BlockType &block_type, FaceType &face_type, int x, int y, int z, int width, int height, int depth, int texture_id) : _block_type(block_type), _face_type(face_type), x(x), y(y), z(z), width(width), height(height), depth(depth), texture_id(texture_id) {
+Face::Face() {
+}
+
+Face::Face(BlockType &block_type, const FaceType &face_type, int x, int y, int z, int width, int height, int depth, int texture_id) : _block_type(block_type), _face_type(face_type), x(x), y(y), z(z), width(width), height(height), depth(depth), texture_id(texture_id) {
     switch (this->_face_type) {
         case FaceType::TOP:
             this->create_top_vertices();
@@ -104,6 +107,30 @@ void Face::add_to_mesh(Mesh &mesh, int index_offset) {
         mesh.add_index(3 + index_offset);
         mesh.add_index(0 + index_offset);
     }
+}
+
+Face Face::make_custom(BlockType block_type, FaceType face_type, const Vertex &v0, const Vertex &v1, const Vertex &v2, const Vertex &v3, std::uint8_t sunlight, int texture_id) {
+    Face face;
+
+    face._block_type = block_type;
+
+    face._face_type = face_type;
+
+    face.vertices[0] = v0;
+    face.vertices[1] = v1;
+    face.vertices[2] = v2;
+    face.vertices[3] = v3;
+
+    for (int vertex_index = 0; vertex_index < 4; ++vertex_index) {
+        Vertex &vertex = face.vertices[vertex_index];
+
+        vertex.sunlight = sunlight;
+        vertex.ambient_occlusion_state = 3U;
+    }
+
+    face.texture_id = texture_id;
+
+    return face;
 }
 
 } // namespace engine::world

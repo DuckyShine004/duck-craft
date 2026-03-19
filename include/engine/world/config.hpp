@@ -20,4 +20,6 @@ static inline constexpr int VERTICAL_RENDER_DISTANCE = 1;
 
 static inline constexpr std::uint32_t MASK32 = 0xFFFFFFFF;
 
+static inline constexpr std::uint32_t SEED = (1 << 4) | (1 << 8) | (1 << 16);
+
 } // namespace engine::world::config

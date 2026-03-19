@@ -46,16 +46,15 @@ float compute_fog(vec3 fragment_position, vec3 camera_position) {
 }
 
 void main() {
-    float face_shade = face_shades[f_face_index];
-
     vec4 colour = texture(u_block_texture_array, vec3(f_uv, float(f_texture_id)));
 
-    // vec4 w_colour = vec4(1.0f);
-    // o_colour = vec4(f_colour, 1.0f);
-    // o_colour = vec4(w_colour.rgb * face_shade, w_colour.a);
-    // o_colour = vec4(w_colour.rgb * f_ambient_occlusion * face_shade, w_colour.a);
+    if (colour.a < 0.5f) {
+        discard;
+    }
 
-    // INFO: Test lightmap
+    float face_shade = face_shades[f_face_index];
+
+    // DEBUG: Test lightmap
     // o_colour = vec4(0.0f, face_shade * f_sunlight, 0.0f, 1.0f);
 
     // INFO: Sharpness
@@ -65,6 +64,13 @@ void main() {
 
     // INFO: Final fragment
     colour = vec4(colour.rgb * f_ambient_occlusion * face_shade * f_sunlight, colour.a);
+
+    /* INFO: Volumetric Fog */
+    vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
+
+    vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
+
+    colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
 
     // INFO: Fog
     // vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
@@ -82,13 +88,6 @@ void main() {
 
     /* INFO: Saturation */
     colour = compute_saturation(colour, u_saturation);
-
-    /* INFO: Volumetric Fog */
-    vec4 volumetric_fog = compute_volumetric_fog(f_fragment_position, u_camera_position);
-
-    vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
-
-    colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
 
     /* INFO: Gamma Correction */
     colour = compute_gamma_correction(colour, u_gamma);
