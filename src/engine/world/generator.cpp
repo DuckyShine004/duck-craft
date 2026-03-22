@@ -159,32 +159,124 @@ BlockType Generator::get_flower(int x, int y, int z) {
     return flower_types[index];
 }
 
+bool Generator::is_tree(int x, int y, int z) {
+    if (this->get_surface_block_type(x, y, z) != BlockType::GRASS) {
+        return false;
+    }
+
+    std::uint32_t seed = this->get_seed(x, y, z, config::SEED);
+
+    int threshold = seed % 1000;
+
+    return threshold <= 20;
+}
+
+void Generator::create_tree(Tree &tree, int x, int y, int z) {
+    std::uint32_t seed = this->get_seed(x, y, z, config::SEED ^ 0xA5A5A5A5u);
+
+    int height = 5 + (seed % 3);
+
+    tree.x = x;
+    tree.y = y;
+    tree.z = z;
+
+    for (int dy = 1; dy <= height; ++dy) {
+        tree.tree_infos.emplace_back(0, dy, 0, BlockType::LOG_OAK);
+    }
+
+    for (int dy = 0; dy < 2; ++dy) {
+        int _y = height - 2 + dy;
+
+        for (int dz = -2; dz <= 2; ++dz) {
+            for (int dx = -2; dx <= 2; ++dx) {
+                if (dx == -2 && dz == -2) {
+                    continue;
+                }
+
+                if (dx == -2 && dz == 2) {
+                    continue;
+                }
+
+                if (dx == 2 && dz == -2) {
+                    continue;
+                }
+
+                if (dx == 2 && dz == 2) {
+                    continue;
+                }
+
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+
+                tree.tree_infos.emplace_back(dx, _y, dz, BlockType::LEAVES_OAK);
+            }
+        }
+    }
+
+    for (int dy = 0; dy < 2; ++dy) {
+        int _y = height + dy;
+
+        for (int dz = -1; dz <= 1; ++dz) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx == -1 && dz == -1) {
+                    continue;
+                }
+
+                if (dx == -1 && dz == 1) {
+                    continue;
+                }
+
+                if (dx == 1 && dz == -1) {
+                    continue;
+                }
+
+                if (dx == 1 && dz == 1) {
+                    continue;
+                }
+
+                if (dx == 0 && dz == 0 && _y <= height) {
+                    continue;
+                }
+
+                tree.tree_infos.emplace_back(dx, _y, dz, BlockType::LEAVES_OAK);
+            }
+        }
+    }
+}
+
 std::uint32_t Generator::get_seed(int x, int y, int z, std::uint32_t seed) {
-    // std::uint32_t seed = config::SEED;
-    //
-    // std::hash<int> hash_fn;
-    //
-    // std::uint32_t hx = static_cast<std::uint32_t>(hash_fn(x));
-    // std::uint32_t hy = static_cast<std::uint32_t>(hash_fn(y));
-    // std::uint32_t hz = static_cast<std::uint32_t>(hash_fn(z));
-    //
-    // seed ^= hx;
-    // seed ^= hy;
-    // seed ^= hz;
-    //
-    // return seed;
     std::uint32_t h = seed;
-    h ^= static_cast<std::uint32_t>(x) * 0x9E3779B1u;
-    h ^= static_cast<std::uint32_t>(y) * 0x85EBCA77u;
-    h ^= static_cast<std::uint32_t>(z) * 0xC2B2AE3Du;
+
+    h ^= static_cast<std::uint32_t>(x) * 0x9E3779B1U;
+    h ^= static_cast<std::uint32_t>(y) * 0x85EBCA77U;
+    h ^= static_cast<std::uint32_t>(z) * 0xC2B2AE3DU;
 
     h ^= h >> 16;
-    h *= 0x85EBCA6Bu;
+    h *= 0x85EBCA6BU;
+
     h ^= h >> 13;
-    h *= 0xC2B2AE35u;
+    h *= 0xC2B2AE35U;
+
     h ^= h >> 16;
 
     return h;
+}
+
+BlockType Generator::get_surface_block_type(int x, int y, int z) {
+    if (y <= 10) {
+        return BlockType::WATER;
+    }
+
+    if (this->is_cave(x, y, z)) {
+        return BlockType::EMPTY;
+    }
+
+    if (y <= 13) {
+        return BlockType::SAND;
+    }
+
+    return BlockType::GRASS;
 }
 
 } // namespace engine::world

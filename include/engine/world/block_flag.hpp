@@ -7,7 +7,9 @@ namespace engine::world {
 enum class BlockFlag : std::uint8_t {
     NONE = 0,
     TRANSPARENT = 1 << 0,
-    LIGHT_PASSTHROUGH = 1 << 1,
+    FOLIAGE = 1 << 1,
+    DIFFUSE_LIGHT = 1 << 2,
+    AMBIENT_OCCLUSION = 1 << 3,
 };
 
 inline constexpr BlockFlag operator|(engine::world::BlockFlag flag_a, engine::world::BlockFlag flag_b) {

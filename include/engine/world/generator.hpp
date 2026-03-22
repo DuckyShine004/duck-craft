@@ -4,6 +4,8 @@
 
 #include <FastNoise/FastNoise.h>
 
+#include "engine/world/tree.hpp"
+#include "engine/world/config.hpp"
 #include "engine/world/block_type.hpp"
 
 namespace engine::world {
@@ -21,6 +23,11 @@ class Generator {
 
     bool is_flower(int x, int y, int z);
     engine::world::BlockType get_flower(int x, int y, int z);
+
+    bool is_tree(int x, int y, int z);
+    void create_tree(engine::world::Tree &tree, int x, int y, int z);
+
+    engine::world::BlockType get_surface_block_type(int x, int y, int z);
 
   private:
     static inline constexpr int _OCTAVES = 4;

@@ -7,6 +7,7 @@
 
 #include <unordered_map>
 
+#include "engine/world/tree.hpp"
 #include "engine/world/chunk.hpp"
 #include "engine/world/generator.hpp"
 #include "engine/world/height_map.hpp"
@@ -26,6 +27,8 @@ class World {
     World();
 
     engine::world::HeightMap *try_emplace_height_map(int chunk_local_x, int chunk_local_z, int chunk_global_x, int chunk_global_z);
+
+    std::vector<Tree> get_trees(int chunk_local_x, int chunk_local_z);
 
     std::uint32_t try_emplace_chunk_id(int chunk_local_x, int chunk_local_y, int chunk_local_z, int chunk_global_x, int chunk_global_y, int chunk_global_z);
 

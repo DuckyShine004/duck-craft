@@ -1,5 +1,7 @@
 #include "engine/world/world.hpp"
 
+#include "logger/logger_macros.hpp"
+
 namespace engine::world {
 
 World::World() : _global_chunk_id(0U) {
@@ -22,6 +24,37 @@ HeightMap *World::try_emplace_height_map(int chunk_local_x, int chunk_local_z, i
     }
 
     return height_map_iterator->second.get();
+}
+
+std::vector<Tree> World::get_trees(int chunk_local_x, int chunk_local_z) {
+    int chunk_global_x = chunk_local_x << config::CHUNK_SIZE_BITS;
+    int chunk_global_z = chunk_local_z << config::CHUNK_SIZE_BITS;
+
+    HeightMap height_map;
+
+    height_map.generate(*this->generator, chunk_global_x, chunk_global_z);
+
+    std::vector<Tree> trees;
+
+    for (int z = 0; z < config::CHUNK_SIZE; ++z) {
+        for (int x = 0; x < config::CHUNK_SIZE; ++x) {
+            int height = height_map.get_height(x, z);
+
+            int voxel_x = chunk_global_x + x;
+            int voxel_y = height;
+            int voxel_z = chunk_global_z + z;
+
+            if (this->generator->is_tree(voxel_x, voxel_y, voxel_z)) {
+                Tree tree;
+
+                this->generator->create_tree(tree, voxel_x, voxel_y, voxel_z);
+
+                trees.emplace_back(std::move(tree));
+            }
+        }
+    }
+
+    return trees;
 }
 
 std::uint32_t World::try_emplace_chunk_id(int chunk_local_x, int chunk_local_y, int chunk_local_z, int chunk_global_x, int chunk_global_y, int chunk_global_z) {

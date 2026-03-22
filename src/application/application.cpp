@@ -27,7 +27,7 @@ using namespace manager;
 
 namespace application {
 
-Application::Application() : _last_time(0.0f), _is_mouse_captured(false) {
+Application::Application() : _last_time(0.0f) {
 }
 
 Application::~Application() {
@@ -180,18 +180,6 @@ void Application::handle_key_press(GLFWwindow *window, int key, int scanmode, in
         } else {
             glfwSetInputMode(this->_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
-        // this->_is_mouse_captured = !this->_is_mouse_captured;
-        // if (this->_is_mouse_captured) {
-        //     glfwSetInputMode(this->_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        //
-        //     int width;
-        //     int height;
-        //
-        //     glfwGetWindowSize(this->_window, &width, &height);
-        //     glfwSetCursorPos(this->_window, width * 0.5, height * 0.5);
-        // } else {
-        //     glfwSetInputMode(this->_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        // }
     }
 
     if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
@@ -218,10 +206,6 @@ void Application::on_cursor(GLFWwindow *window, double x, double y) {
 }
 
 void Application::handle_cursor(GLFWwindow *window, double x, double y) {
-    // if (!this->_is_mouse_captured) {
-    //     return;
-    // }
-
     CameraManager &camera_manager = CameraManager::get_instance();
 
     camera::Camera *camera = CameraManager::get_instance().get_camera();
@@ -241,10 +225,6 @@ void Application::on_scroll(GLFWwindow *window, double x, double y) {
 }
 
 void Application::handle_scroll(GLFWwindow *window, double x, double y) {
-    // if (!this->_is_mouse_captured) {
-    //     return;
-    // }
-
     CameraManager &camera_manager = CameraManager::get_instance();
 
     camera::Camera *camera = CameraManager::get_instance().get_camera();

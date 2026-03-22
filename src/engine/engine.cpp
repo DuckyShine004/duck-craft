@@ -77,83 +77,17 @@ void Engine::update(GLFWwindow *window, float delta_time) {
 }
 
 void Engine::render() {
-    Setting *setting = this->_setting.get();
-
-    ImGui::SetNextWindowSize(ImVec2(400.0f, 0.0f), ImGuiCond_FirstUseEver);
-
-    ImGui::Begin("Engine");
-
-    if (ImGui::BeginTable("post_processing_table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV)) {
-        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
-
-        float input_width = 90.0f;
-        float spacing = ImGui::GetStyle().ItemSpacing.x;
-
-        // Saturation
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted("Saturation");
-        ImGui::TableSetColumnIndex(1);
-
-        ImGui::PushID("saturation");
-        {
-            float available_width = ImGui::GetContentRegionAvail().x;
-
-            ImGui::SetNextItemWidth(available_width - input_width - spacing);
-            ImGui::SliderFloat("##slider", &setting->saturation, 0.0f, 10.0f, "%.2f");
-
-            ImGui::SameLine();
-
-            ImGui::SetNextItemWidth(input_width);
-            if (ImGui::InputFloat("##input", &setting->saturation, 0.1f, 1.0f, "%.2f")) {
-                setting->saturation = std::clamp(setting->saturation, 0.0f, 10.0f);
-            }
-        }
-        ImGui::PopID();
-
-        // Gamma
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted("Gamma");
-        ImGui::TableSetColumnIndex(1);
-
-        ImGui::PushID("gamma");
-        {
-            float available_width = ImGui::GetContentRegionAvail().x;
-
-            ImGui::SetNextItemWidth(available_width - input_width - spacing);
-            ImGui::SliderFloat("##slider", &setting->gamma, 0.01f, 10.0f, "%.2f");
-
-            ImGui::SameLine();
-
-            ImGui::SetNextItemWidth(input_width);
-            if (ImGui::InputFloat("##input", &setting->gamma, 0.01f, 0.1f, "%.2f")) {
-                setting->gamma = std::clamp(setting->gamma, 0.01f, 10.0f);
-            }
-        }
-        ImGui::PopID();
-
-        // FPS
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted("FPS");
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%.1f FPS (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
-
-        ImGui::EndTable();
-    }
-
-    ImGui::End();
-    ChunkManager &chunk_manager = ChunkManager::get_instance();
     CameraManager &camera_manager = CameraManager::get_instance();
+    ChunkManager &chunk_manager = ChunkManager::get_instance();
     TextureManager &texture_manager = TextureManager::get_instance();
     DisplayManager &display_manager = DisplayManager::get_instance();
 
-    float display_width = display_manager.get_width();
-    float display_height = display_manager.get_height();
+    Setting *setting = this->_setting.get();
 
     Camera *current_camera = camera_manager.get_camera();
+
+    float display_width = display_manager.get_width();
+    float display_height = display_manager.get_height();
 
     // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -267,6 +201,127 @@ void Engine::render() {
 
         camera->get_frustum().render(scene);
     }
+
+    ImGui::SetNextWindowSize(ImVec2(400.0f, 0.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Debug");
+
+    float input_width = 90.0f;
+    float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+    if (ImGui::CollapsingHeader("Engine", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::BeginTable("engine_table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV)) {
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("Saturation");
+            ImGui::TableSetColumnIndex(1);
+
+            ImGui::PushID("engine_saturation");
+            {
+                float available_width = ImGui::GetContentRegionAvail().x;
+                ImGui::SetNextItemWidth(available_width - input_width - spacing);
+                ImGui::SliderFloat("##slider", &setting->saturation, 0.0f, 10.0f, "%.2f");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                if (ImGui::InputFloat("##input", &setting->saturation, 0.1f, 1.0f, "%.2f")) {
+                    setting->saturation = std::clamp(setting->saturation, 0.0f, 10.0f);
+                }
+            }
+            ImGui::PopID();
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("Gamma");
+            ImGui::TableSetColumnIndex(1);
+
+            ImGui::PushID("engine_gamma");
+            {
+                float available_width = ImGui::GetContentRegionAvail().x;
+                ImGui::SetNextItemWidth(available_width - input_width - spacing);
+                ImGui::SliderFloat("##slider", &setting->gamma, 0.01f, 10.0f, "%.2f");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                if (ImGui::InputFloat("##input", &setting->gamma, 0.01f, 0.1f, "%.2f")) {
+                    setting->gamma = std::clamp(setting->gamma, 0.01f, 10.0f);
+                }
+            }
+            ImGui::PopID();
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("FPS");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%.1f FPS (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
+
+            ImGui::EndTable();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::BeginTable("camera_table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV)) {
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("FOV");
+            ImGui::TableSetColumnIndex(1);
+
+            ImGui::PushID("camera_fov");
+            {
+                float available_width = ImGui::GetContentRegionAvail().x;
+                float fov = current_camera->fov;
+
+                bool changed = false;
+
+                ImGui::SetNextItemWidth(available_width - input_width - spacing);
+                changed |= ImGui::SliderFloat("##slider", &fov, 1.0f, 90.0f, "%.1f");
+
+                ImGui::SameLine();
+
+                ImGui::SetNextItemWidth(input_width);
+                changed |= ImGui::InputFloat("##input", &fov, 1.0f, 90.0f, "%.1f");
+
+                if (changed) {
+                    fov = std::clamp(fov, 1.0f, 90.0f);
+                    current_camera->fov = fov;
+                    current_camera->update_projection();
+                }
+            }
+            ImGui::PopID();
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("Speed");
+            ImGui::TableSetColumnIndex(1);
+
+            ImGui::PushID("camera_speed");
+            {
+                float available_width = ImGui::GetContentRegionAvail().x;
+
+                ImGui::SetNextItemWidth(available_width - input_width - spacing);
+                ImGui::SliderFloat("##slider", &current_camera->speed, 0.01f, 100.0f, "%.2f");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(input_width);
+                if (ImGui::InputFloat("##input", &current_camera->speed, 0.01f, 100.0f, "%.2f")) {
+                    current_camera->speed = std::clamp(current_camera->speed, 0.01f, 100.0f);
+                }
+            }
+            ImGui::PopID();
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("Position");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("(%.2f, %.2f, %.2f)", current_camera->transform.position.x, current_camera->transform.position.y, current_camera->transform.position.z);
+
+            ImGui::EndTable();
+        }
+    }
+
+    ImGui::End();
 }
 
 } // namespace engine

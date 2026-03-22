@@ -72,13 +72,6 @@ void main() {
 
     colour = vec4(colour.rgb * volumetric_fog.a + volumetric_fog.rgb + (1.0f - volumetric_fog.a) * fog_colour, colour.a);
 
-    // INFO: Fog
-    // vec3 fog_colour = vec3(0.5f, 0.5f, 0.5f);
-    //
-    // float fog = compute_fog(f_fragment_position, u_camera_position);
-    //
-    // colour = vec4(mix(fog_colour, colour.rgb, fog), colour.a);
-
     /* INFO: Constrast */
     // float brightness = face_shade * f_sunlight;
     //

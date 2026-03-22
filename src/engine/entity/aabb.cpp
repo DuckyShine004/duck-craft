@@ -9,25 +9,25 @@ using namespace common;
 namespace engine::entity {
 
 AABB::AABB(float x, float y, float z, float width, float height, float depth) {
-    this->_min_x = x;
-    this->_min_y = y;
-    this->_min_z = z;
+    this->min_x = x;
+    this->min_y = y;
+    this->min_z = z;
 
-    this->_max_x = x + width;
-    this->_max_y = y + height;
-    this->_max_z = z + depth;
+    this->max_x = x + width;
+    this->max_y = y + height;
+    this->max_z = z + depth;
 
     /* Bottom */
-    glm::vec3 b1(this->_min_x, this->_min_y, this->_min_z);
-    glm::vec3 b2(this->_min_x, this->_min_y, this->_max_z);
-    glm::vec3 b3(this->_max_x, this->_min_y, this->_max_z);
-    glm::vec3 b4(this->_max_x, this->_min_y, this->_min_z);
+    glm::vec3 b1(this->min_x, this->min_y, this->min_z);
+    glm::vec3 b2(this->min_x, this->min_y, this->max_z);
+    glm::vec3 b3(this->max_x, this->min_y, this->max_z);
+    glm::vec3 b4(this->max_x, this->min_y, this->min_z);
 
     /* Top */
-    glm::vec3 t1(this->_min_x, this->_max_y, this->_min_z);
-    glm::vec3 t2(this->_min_x, this->_max_y, this->_max_z);
-    glm::vec3 t3(this->_max_x, this->_max_y, this->_max_z);
-    glm::vec3 t4(this->_max_x, this->_max_y, this->_min_z);
+    glm::vec3 t1(this->min_x, this->max_y, this->min_z);
+    glm::vec3 t2(this->min_x, this->max_y, this->max_z);
+    glm::vec3 t3(this->max_x, this->max_y, this->max_z);
+    glm::vec3 t4(this->max_x, this->max_y, this->min_z);
 
     this->_points[0] = b1;
     this->_points[1] = b2;
@@ -69,9 +69,9 @@ bool AABB::collide(Sphere &sphere) {
 
     float radius = sphere.get_radius();
 
-    float x = glm::clamp(position.x, this->_min_x, this->_max_x);
-    float y = glm::clamp(position.y, this->_min_y, this->_max_y);
-    float z = glm::clamp(position.z, this->_min_z, this->_max_z);
+    float x = glm::clamp(position.x, this->min_x, this->max_x);
+    float y = glm::clamp(position.y, this->min_y, this->max_y);
+    float z = glm::clamp(position.z, this->min_z, this->max_z);
 
     glm::vec3 delta = position - glm::vec3(x, y, z);
 

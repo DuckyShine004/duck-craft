@@ -9,6 +9,8 @@ enum class BlockType {
     DIRT,
     WATER,
     SAND,
+    LOG_OAK,
+    LEAVES_OAK,
     DANDELION,
     ROSE,
     SHORT_GRASS,

@@ -75,6 +75,7 @@ void main() {
     f_face_index = get_face_index(v_normal);
 
     f_ambient_occlusion = ambient_occlusion[int(v_ambient_occlusion_state)];
+
     f_sunlight = float(max(v_sunlight, 1U)) / 15.0f;
 
     f_texture_id = v_texture_id;

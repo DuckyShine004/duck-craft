@@ -21,6 +21,9 @@ class Camera {
   public:
     engine::model::Transform transform;
 
+    float fov;
+    float speed;
+
     Camera();
 
     Camera(glm::vec3 position);
@@ -80,7 +83,6 @@ class Camera {
 
     engine::camera::Frustum _frustum;
 
-    float _field_of_view;
     float _aspect_ratio;
     float _near;
     float _far;

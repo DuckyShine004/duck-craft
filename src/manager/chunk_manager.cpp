@@ -178,6 +178,8 @@ void ChunkManager::render_opaque(Shader &shader) {
         if (chunk->is_state_set(ChunkState::RENDERING)) {
             chunk->render_opaque(shader);
         }
+
+        chunk->get_aabb().render(shader);
     }
 }
 

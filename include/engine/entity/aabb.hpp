@@ -11,6 +11,14 @@ namespace engine::entity {
 
 class AABB {
   public:
+    float min_x;
+    float min_y;
+    float min_z;
+
+    float max_x;
+    float max_y;
+    float max_z;
+
     /**
      * @brief Construct AABB, bottom-to-top with anti-clockwise order, using (0,0,0) as origin anchor
      *
@@ -50,14 +58,6 @@ class AABB {
     // clang-format on
 
     engine::model::Mesh _mesh;
-
-    float _min_x;
-    float _min_y;
-    float _min_z;
-
-    float _max_x;
-    float _max_y;
-    float _max_z;
 
     glm::vec3 _points[8];
 };

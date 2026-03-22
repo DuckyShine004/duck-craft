@@ -8,6 +8,7 @@
 
 #include <queue>
 
+#include "engine/world/tree.hpp"
 #include "engine/world/world.hpp"
 #include "engine/world/chunk.hpp"
 #include "engine/world/block.hpp"
@@ -15,7 +16,6 @@
 
 #include "engine/model/vertex.hpp"
 
-#include "utility/math_utility.hpp"
 #include "utility/colour_utility.hpp"
 
 #include "common/constant.hpp"
@@ -116,6 +116,39 @@ void Chunk::generate_terrain(World &world) {
                     }
                 } else if (dy < height - 3) {
                     Block::set(block, BlockType::STONE);
+                }
+            }
+        }
+    }
+
+    int max_x = this->global_x + config::CHUNK_SIZE;
+    int max_y = this->global_y + config::CHUNK_SIZE;
+    int max_z = this->global_z + config::CHUNK_SIZE;
+
+    // Generate trees
+    for (int tree_dz = -1; tree_dz <= 1; ++tree_dz) {
+        for (int tree_dx = -1; tree_dx <= 1; ++tree_dx) {
+            std::vector<Tree> trees = world.get_trees(this->local_x + tree_dx, this->local_z + tree_dz);
+
+            for (const Tree &tree : trees) {
+                for (const TreeInfo &tree_info : tree.tree_infos) {
+                    int global_x = tree.x + tree_info.dx;
+                    int global_y = tree.y + tree_info.dy;
+                    int global_z = tree.z + tree_info.dz;
+
+                    if (global_x < this->global_x || global_x >= max_x || global_y < this->global_y || global_y >= max_y || global_z < this->global_z || global_z >= max_z) {
+                        continue;
+                    }
+
+                    int local_x = global_x & (config::CHUNK_SIZE - 1);
+                    int local_y = global_y & (config::CHUNK_SIZE - 1);
+                    int local_z = global_z & (config::CHUNK_SIZE - 1);
+
+                    std::uint16_t &block = this->get_block(local_x, local_y, local_z);
+
+                    if (Block::get_type(block) == BlockType::EMPTY || Block::has_flag(block, BlockFlag::FOLIAGE)) {
+                        Block::set(block, tree_info.block_type);
+                    }
                 }
             }
         }
@@ -231,8 +264,8 @@ void Chunk::propagate_sunlight(World &world) {
 
                 queue.emplace(voxel_id);
 
-                // If we are in water, we set water sunlight, then we break, and let bfs do the attenuation
-                if (Block::get_type(block) == BlockType::WATER) {
+                // If can diffuse sunlight, we set block sunlight, then we break, and let bfs do the attenuation
+                if (Block::has_flag(block, BlockFlag::DIFFUSE_LIGHT)) {
                     break;
                 }
             }
@@ -403,8 +436,8 @@ void Chunk::propagate_sunlight(World &world) {
 
             // Check if we are traversing down and we have direct sunlight
             if (face_type == FaceType::BOTTOM && sunlight == 15U) {
-                // If the current block is not water, then we can attenuate the light
-                if (Block::get_type(block) != BlockType::WATER) {
+                // If the current block cannot diffuse light, then we can attenuate the light
+                if (!Block::has_flag(block, BlockFlag::DIFFUSE_LIGHT)) {
                     next_sunlight = sunlight;
                 }
             }
@@ -639,6 +672,8 @@ void Chunk::upload_mesh() {
     this->set_state(ChunkState::RENDERING);
 }
 
+/* FIX: Race condition still happening- face vector */
+/* TODO: For transparent textures, only cull one side to avoid texture bleeding, while preserving face correctness */
 void Chunk::merge_faces(BlockType &block_type, FaceType &face_type, int texture_id) {
     if (block_type == BlockType::WATER && face_type != FaceType::TOP) {
         return;
@@ -681,9 +716,19 @@ void Chunk::merge_XY_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 // If the adjacent block is loaded
                 if (adjacent_block != nullptr) {
-                    // If the adjacent block is not empty
-                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
-                        continue;
+                    // If the adjacent block is not empty, i.e., air and not foliage
+                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::FOLIAGE)) {
+                        std::uint16_t &block = this->get_block(x, y, z);
+
+                        // If the current block is transparent then we skip
+                        if (Block::has_flag(block, BlockFlag::TRANSPARENT)) {
+                            continue;
+                        }
+
+                        // Otherwise, block is solid, and we only skip if neighbour is solid
+                        if (!Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
+                            continue;
+                        }
                     }
                 }
 
@@ -823,11 +868,21 @@ void Chunk::merge_XZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 std::uint16_t *adjacent_block = this->get_neighbour_block(this->global_x + x + nx, this->global_y + y + ny, this->global_z + z + nz);
 
-                // If the adjacent block is loaded
+                // If the adjacent block is loaded and current block is not water
                 if (block_type != BlockType::WATER && adjacent_block != nullptr) {
-                    // If the adjacent block is not empty or is not transparent
-                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
-                        continue;
+                    // If the adjacent block is not empty, i.e., air and not foliage
+                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::FOLIAGE)) {
+                        std::uint16_t &block = this->get_block(x, y, z);
+
+                        // If the current block is transparent then we skip
+                        if (Block::has_flag(block, BlockFlag::TRANSPARENT)) {
+                            continue;
+                        }
+
+                        // Otherwise, block is solid, and we only skip if neighbour is solid
+                        if (!Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
+                            continue;
+                        }
                     }
                 }
 
@@ -983,9 +1038,19 @@ void Chunk::merge_YZ_faces(BlockType &block_type, FaceType &face_type, int textu
 
                 // If the adjacent block is loaded
                 if (adjacent_block != nullptr) {
-                    // If the adjacent block is not empty
-                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
-                        continue;
+                    // If the adjacent block is not empty, i.e., air and not foliage
+                    if (Block::get_type(*adjacent_block) != BlockType::EMPTY && !Block::has_flag(*adjacent_block, BlockFlag::FOLIAGE)) {
+                        std::uint16_t &block = this->get_block(x, y, z);
+
+                        // If the current block is transparent then we skip regardless of opacity the neighbour block is
+                        if (Block::has_flag(block, BlockFlag::TRANSPARENT)) {
+                            continue;
+                        }
+
+                        // Otherwise, block is solid, and we only skip if neighbour is solid
+                        if (!Block::has_flag(*adjacent_block, BlockFlag::TRANSPARENT)) {
+                            continue;
+                        }
                     }
                 }
 
@@ -1106,7 +1171,7 @@ void Chunk::clear_mesh() {
 }
 
 int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int vertex_index, int x, int y, int z) {
-    if (Block::has_flag(this->_blocks[this->get_voxel_id(x, y, z)], BlockFlag::TRANSPARENT)) {
+    if (!Block::has_flag(this->get_block(x, y, z), BlockFlag::AMBIENT_OCCLUSION)) {
         return 3;
     }
 
@@ -1125,7 +1190,8 @@ int Chunk::get_ambient_occlusion(BlockType &block_type, int face_type_index, int
             continue;
         }
 
-        side_values[side_index] = (Block::has_flag(*side_block, BlockFlag::TRANSPARENT)) ? 0 : 1;
+        // If neighbour block has ambient occlusion, then current block must also have ambient occlusion since it would look ugly otherwise
+        side_values[side_index] = (Block::has_flag(*side_block, BlockFlag::AMBIENT_OCCLUSION)) ? 1 : 0;
     }
 
     if (side_values[0] && side_values[1]) {

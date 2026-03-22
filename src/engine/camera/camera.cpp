@@ -15,7 +15,7 @@ namespace engine::camera {
 Camera::Camera() : Camera(0.0f, 0.0f, 0.0f) {
 }
 
-Camera::Camera(float x, float y, float z) : transform(x, y, z), _last_cursor_position(glm::vec2(-1.0f)), _field_of_view(this->_FIELD_OF_VIEW), _near(this->_NEAR), _far(this->_FAR) {
+Camera::Camera(float x, float y, float z) : transform(x, y, z), _last_cursor_position(glm::vec2(-1.0f)), fov(this->_FIELD_OF_VIEW), _near(this->_NEAR), _far(this->_FAR), speed(this->_SPEED) {
     this->update_projection();
 
     this->update_view();
@@ -24,17 +24,17 @@ Camera::Camera(float x, float y, float z) : transform(x, y, z), _last_cursor_pos
 void Camera::update_projection() {
     this->update_aspect_ratio();
 
-    float field_of_view = glm::radians(this->_field_of_view);
+    float fov = glm::radians(this->fov);
 
-    this->_MVP_component.projection = glm::perspective(field_of_view, this->_aspect_ratio, this->_near, this->_far);
+    this->_MVP_component.projection = glm::perspective(fov, this->_aspect_ratio, this->_near, this->_far);
 
-    this->_frustum.update(this->transform.position, this->_view_component, this->_field_of_view, this->_aspect_ratio, this->_near, this->_far);
+    this->_frustum.update(this->transform.position, this->_view_component, this->fov, this->_aspect_ratio, this->_near, this->_far);
 }
 
 void Camera::update_view() {
     this->_MVP_component.view = glm::lookAt(this->transform.position, this->transform.position + this->_view_component.front, this->_view_component.up);
 
-    this->_frustum.update(this->transform.position, this->_view_component, this->_field_of_view, this->_aspect_ratio, this->_near, this->_far);
+    this->_frustum.update(this->transform.position, this->_view_component, this->fov, this->_aspect_ratio, this->_near, this->_far);
 }
 
 void Camera::update(GLFWwindow *window, float delta_time) {
@@ -94,7 +94,7 @@ void Camera::upload_position(Shader &shader) {
 }
 
 void Camera::move(Direction direction, float delta_time) {
-    float velocity = this->_SPEED * delta_time;
+    float velocity = this->speed * delta_time;
 
     glm::vec3 movement(0.0f);
 
@@ -144,17 +144,18 @@ void Camera::rotate(double x, double y) {
 }
 
 void Camera::scroll(double x, double y) {
-    this->_field_of_view -= (float)y;
-    this->_field_of_view = glm::clamp(this->_field_of_view, this->_FIELD_OF_VIEW_LIMITS.first, this->_FIELD_OF_VIEW_LIMITS.second);
+    this->fov -= static_cast<float>(y);
 
-    LOG_INFO("FOV: {}", this->_field_of_view);
+    this->fov = std::clamp(this->fov, this->_FIELD_OF_VIEW_LIMITS.first, this->_FIELD_OF_VIEW_LIMITS.second);
+
+    LOG_INFO("FOV: {}", this->fov);
 
     this->update_projection();
 }
 
 void Camera::update_rotation_component(glm::vec2 offset) {
     this->_rotation_component.yaw += offset.x;
-    this->_rotation_component.pitch = glm::clamp(this->_rotation_component.pitch + offset.y, -this->_PITCH_LIMIT, this->_PITCH_LIMIT);
+    this->_rotation_component.pitch = std::clamp(this->_rotation_component.pitch + offset.y, -this->_PITCH_LIMIT, this->_PITCH_LIMIT);
 
     float theta = glm::radians(this->_rotation_component.yaw);
     float omega = glm::radians(this->_rotation_component.pitch);
