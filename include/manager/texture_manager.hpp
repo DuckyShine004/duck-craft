@@ -35,6 +35,8 @@ class TextureManager final : public Manager {
     void load_environment_textures();
 
     void sort_block_directory_by_type();
+
+    std::unordered_map<std::string, int> get_index(const std::string &parent_directory);
 };
 
 } // namespace manager

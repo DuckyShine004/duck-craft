@@ -48,10 +48,6 @@ float compute_fog(vec3 fragment_position, vec3 camera_position) {
 void main() {
     vec4 colour = texture(u_block_texture_array, vec3(f_uv, float(f_texture_id)));
 
-    if (colour.a < 0.5f) {
-        discard;
-    }
-
     float face_shade = face_shades[f_face_index];
 
     // DEBUG: Test lightmap

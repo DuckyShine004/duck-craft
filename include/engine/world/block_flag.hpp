@@ -16,4 +16,10 @@ inline constexpr BlockFlag operator|(engine::world::BlockFlag flag_a, engine::wo
     return static_cast<engine::world::BlockFlag>(static_cast<std::uint16_t>(flag_a) | static_cast<std::uint16_t>(flag_b));
 }
 
+inline constexpr BlockFlag operator|=(engine::world::BlockFlag &self, engine::world::BlockFlag other) {
+    self = self | other;
+
+    return self;
+}
+
 } // namespace engine::world

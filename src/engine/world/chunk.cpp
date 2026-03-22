@@ -546,7 +546,7 @@ void Chunk::generate_mesh(Camera &camera) {
         for (int block_type_index = 1; block_type_index < number_of_blocks; ++block_type_index) {
             BlockType block_type = static_cast<BlockType>(block_type_index);
 
-            int texture_id = (block_type_index - 1) * 6 + face_type_index;
+            int texture_id = BLOCK_METADATA[block_type_index].texture_ids[face_type_index];
 
             if (block_type == BlockType::ROSE || block_type == BlockType::DANDELION || block_type == BlockType::SHORT_GRASS || block_type == BlockType::TALL_GRASS) {
                 for (int z = 0; z < config::CHUNK_SIZE; ++z) {

@@ -1,11 +1,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 
+#include <fstream>
+
 #include "external/stb/stb_image.h"
 
 #include "external/magic_enum/magic_enum.hpp"
 
-#include "engine/world/face_type.hpp"
-#include "engine/world/block_type.hpp"
+#include "engine/world/block_metadata.hpp"
 
 #include "manager/texture_manager.hpp"
 
@@ -91,55 +92,66 @@ void TextureManager::load_block_textures() {
     const int WIDTH = 16;
     const int HEIGHT = 16;
 
-    const int LAYERS = (static_cast<int>(BlockType::COUNT) - 1) * 6;
-
-    GLuint texture_handle = this->generate_texture_array_and_get_id("block", WIDTH, HEIGHT, LAYERS);
-
     std::string directory = std::string(this->_PARENT_DIRECTORY) + "block";
 
-    std::vector<std::string> block_directories = FileUtility::get_paths_in_directory(directory);
+    std::regex pattern("[^\\s]+(?:\\.(?:png))$");
 
-    std::sort(block_directories.begin(), block_directories.end(), [](const std::string &a, const std::string &b) -> bool {
+    int layers = FileUtility::get_number_of_files_in_directory(directory, pattern);
+
+    GLuint texture_handle = this->generate_texture_array_and_get_id("block", WIDTH, HEIGHT, layers);
+
+    std::unordered_map<std::string, int> index = this->get_index(directory);
+
+    std::vector<std::string> texture_paths = FileUtility::get_paths_in_directory(directory);
+
+    std::sort(texture_paths.begin(), texture_paths.end(), [&](const std::string &a, const std::string &b) -> bool {
         std::string a_basename = FileUtility::get_basename_from_path(a);
         std::string b_basename = FileUtility::get_basename_from_path(b);
 
-        std::string a_enum_name = StringUtility::to_upper(a_basename);
-        std::string b_enum_name = StringUtility::to_upper(b_basename);
-
-        BlockType a_block_type = magic_enum::enum_cast<BlockType>(a_enum_name).value();
-        BlockType b_block_type = magic_enum::enum_cast<BlockType>(b_enum_name).value();
-
-        int a_value = static_cast<int>(a_block_type);
-        int b_value = static_cast<int>(b_block_type);
-
-        return a_value < b_value;
+        return index[a_basename] < index[b_basename];
     });
 
     int layer = 0;
 
-    for (std::string &block_directory : block_directories) {
-        std::vector<std::string> texture_paths = FileUtility::get_paths_in_directory(block_directory);
-
-        std::sort(texture_paths.begin(), texture_paths.end(), [](const std::string &a, const std::string &b) -> bool {
-            std::string a_basename = FileUtility::get_basename_from_path(a);
-            std::string b_basename = FileUtility::get_basename_from_path(b);
-
-            std::string a_enum_name = StringUtility::to_upper(a_basename);
-            std::string b_enum_name = StringUtility::to_upper(b_basename);
-
-            FaceType a_face_type = magic_enum::enum_cast<FaceType>(a_enum_name).value();
-            FaceType b_face_type = magic_enum::enum_cast<FaceType>(b_enum_name).value();
-
-            int a_value = static_cast<int>(a_face_type);
-            int b_value = static_cast<int>(b_face_type);
-
-            return a_value < b_value;
-        });
-
-        for (std::string &texture_path : texture_paths) {
+    for (std::string &texture_path : texture_paths) {
+        if (std::regex_match(texture_path, pattern)) {
             this->load_texture(texture_path, layer, texture_handle);
 
             ++layer;
+        }
+    }
+
+    nlohmann::json metadata;
+
+    FileUtility::load_json(metadata, directory + "/metadata.json");
+
+    for (auto property : metadata) {
+        int id = property.at("id").get<int>();
+
+        BlockMetadata &block_metadata = BLOCK_METADATA[id];
+
+        std::vector<std::string> flags = property.at("flags").get<std::vector<std::string>>();
+
+        for (std::string &flag : flags) {
+            block_metadata.flags |= magic_enum::enum_cast<BlockFlag>(StringUtility::to_upper(flag)).value();
+        }
+
+        std::string name = property.at("name").get<std::string>();
+
+        if (name == "empty") {
+            continue;
+        }
+
+        std::vector<std::string> textures = property.at("textures").get<std::vector<std::string>>();
+
+        if (textures[0] == "all") {
+            std::fill(std::begin(block_metadata.texture_ids), std::end(block_metadata.texture_ids), index[name]);
+        } else {
+            for (int i = 0; i < 6; ++i) {
+                std::string texture_name = name + '_' + textures[i];
+
+                block_metadata.texture_ids[i] = index[texture_name];
+            }
         }
     }
 }
@@ -163,6 +175,45 @@ void TextureManager::load_environment_textures() {
 
         ++layer;
     }
+}
+
+std::unordered_map<std::string, int> TextureManager::get_index(const std::string &directory) {
+    std::string path = directory + '/' + "index.txt";
+
+    std::ifstream file(path, std::ios::binary);
+
+    std::unordered_map<std::string, int> index;
+
+    std::string token;
+
+    std::stringstream buffer;
+
+    int order = 0;
+
+    while (std::getline(file, token)) {
+        std::vector<std::string> textures = StringUtility::split_string(token, ' ');
+
+        std::string &parent_texture_name = textures[0];
+
+        std::size_t texture_count = textures.size();
+
+        LOG_INFO("Parent texture name: {}", parent_texture_name);
+        if (texture_count == 1) {
+            index[parent_texture_name] = order++;
+
+            continue;
+        }
+
+        for (int i = 1; i < texture_count; ++i) {
+            std::string texture_name = parent_texture_name + '_' + textures[i];
+
+            LOG_INFO("Texture name: {}", texture_name);
+
+            index[texture_name] = order++;
+        }
+    }
+
+    return index;
 }
 
 } // namespace manager

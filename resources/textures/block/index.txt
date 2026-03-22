@@ -1,0 +1,14 @@
+stone
+grass side top
+dirt
+cobblestone
+oak_planks
+bedrock
+water
+sand
+oak_log side top
+oak_leaves
+dandelion
+rose
+short_grass
+tall_grass

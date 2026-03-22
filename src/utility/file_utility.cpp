@@ -200,4 +200,18 @@ bool FileUtility::is_directory(const std::string &path) {
     return std::filesystem::is_directory(path);
 }
 
+int FileUtility::get_number_of_files_in_directory(const std::string &directory, const std::regex &pattern) {
+    std::vector<std::string> files = FileUtility::get_files_in_directory(directory);
+
+    int number_of_files = 0;
+
+    for (std::string &file : files) {
+        if (std::regex_match(file, pattern)) {
+            ++number_of_files;
+        }
+    }
+
+    return number_of_files;
+}
+
 } // namespace utility

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <regex>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -35,6 +36,8 @@ class FileUtility {
     static bool is_file(const std::string &path);
 
     static bool is_directory(const std::string &path);
+
+    static int get_number_of_files_in_directory(const std::string &directory, const std::regex &pattern);
 };
 
 } // namespace utility

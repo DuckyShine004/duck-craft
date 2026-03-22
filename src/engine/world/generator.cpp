@@ -181,7 +181,7 @@ void Generator::create_tree(Tree &tree, int x, int y, int z) {
     tree.z = z;
 
     for (int dy = 1; dy <= height; ++dy) {
-        tree.tree_infos.emplace_back(0, dy, 0, BlockType::LOG_OAK);
+        tree.tree_infos.emplace_back(0, dy, 0, BlockType::OAK_LOG);
     }
 
     for (int dy = 0; dy < 2; ++dy) {
@@ -209,7 +209,7 @@ void Generator::create_tree(Tree &tree, int x, int y, int z) {
                     continue;
                 }
 
-                tree.tree_infos.emplace_back(dx, _y, dz, BlockType::LEAVES_OAK);
+                tree.tree_infos.emplace_back(dx, _y, dz, BlockType::OAK_LEAVES);
             }
         }
     }
@@ -239,7 +239,7 @@ void Generator::create_tree(Tree &tree, int x, int y, int z) {
                     continue;
                 }
 
-                tree.tree_infos.emplace_back(dx, _y, dz, BlockType::LEAVES_OAK);
+                tree.tree_infos.emplace_back(dx, _y, dz, BlockType::OAK_LEAVES);
             }
         }
     }
