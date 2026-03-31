@@ -55,7 +55,7 @@ class Frustum {
         LEFT,
         RIGHT,
         NEAR,
-        FAR,
+        FAR
     };
     // clang-format on
 

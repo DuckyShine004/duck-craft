@@ -3,7 +3,14 @@
 #include <glm/geometric.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#include <zlib.h>
+#include <fstream>
+
 #include "manager/chunk_manager.hpp"
+
+#include "utility/file_utility.hpp"
+
+#include "parser/nbt.hpp"
 
 #include "logger/logger_macros.hpp"
 
@@ -14,6 +21,8 @@ using namespace engine::camera;
 using namespace engine::shader;
 
 using namespace engine::threading;
+
+using namespace utility;
 
 namespace manager {
 
@@ -65,6 +74,130 @@ void ChunkManager::generate_chunk_at_local_position(int local_x, int local_y, in
     if (!chunk->is_task_running(ChunkTask::TERRAIN_GENERATION) && !chunk->is_state_set(ChunkState::TERRAIN_GENERATED)) {
         chunk->queue_tasks(ChunkTask::TERRAIN_GENERATION);
     }
+}
+
+void ChunkManager::load_chunk(Camera *camera) {
+    int global_x = static_cast<int>(camera->transform.position.x);
+    int global_z = static_cast<int>(camera->transform.position.z);
+
+    int chunk_x = global_x >> config::CHUNK_SIZE_BITS;
+    int chunk_z = global_x >> config::CHUNK_SIZE_BITS;
+
+    int region_x = chunk_x >> config::CHUNK_SIZE_BITS;
+    int region_z = chunk_z >> config::CHUNK_SIZE_BITS;
+
+    int local_x = chunk_x & 31;
+    int local_z = chunk_z & 31;
+
+    std::string region_directory = "data/saves/test/region";
+
+    std::string region_filename = fmt::format("{}/r.{}.{}.mcr", region_directory, region_x, region_z);
+
+    std::string json_filename = fmt::format("{}/r.{}.{}.c.{}.{}.json", region_directory, region_x, region_z, chunk_x, chunk_z);
+
+    if (FileUtility::path_exists(json_filename)) {
+        return;
+    }
+
+    std::ifstream file(region_filename, std::ios::binary);
+
+    if (!file.is_open()) {
+        LOG_ERROR("Error opening file: {}", region_filename);
+        return;
+    }
+
+    // Retrieve the chunk location (0-4095)
+    int offset = (local_x + (local_z << config::CHUNK_SIZE_BITS)) << 2;
+
+    file.seekg(offset);
+
+    std::uint8_t sector_data[4];
+
+    // Read the next four bytes from the current pointer to extract sector data
+    file.read(reinterpret_cast<char *>(sector_data), 4);
+
+    // Big endian, so we read from left to right, leftmost is most significant
+    std::uint32_t sector_offset = ((sector_data[0] << 16) | (sector_data[1] << 8) | sector_data[2]);
+
+    std::uint8_t sector_count = sector_data[3];
+
+    // Check sector offset and sector count
+    if (sector_offset == 0U && sector_count == 0U) {
+        LOG_WARN("Chunk data not found for position: ({},{})", region_x, region_z);
+        return;
+    }
+
+    // Chunk data is padded to be multiple of 4096 bytes
+    file.seekg(sector_offset * 4096);
+
+    // Get the length of the data
+    std::uint8_t chunk_data[4];
+    file.read(reinterpret_cast<char *>(chunk_data), 4);
+
+    // Chunk data length in bytes
+    std::uint32_t chunk_data_length = ((chunk_data[0] << 24) | (chunk_data[1] << 16) | (chunk_data[2] << 8) | chunk_data[3]);
+
+    // LOG_INFO("Chunk data bytes: {}B", chunk_data_length);
+
+    // If there is no chunk data, we skip
+    if (chunk_data_length == 0U) {
+        LOG_WARN("No chunk data");
+        return;
+    }
+
+    std::uint8_t compression_type;
+    file.read(reinterpret_cast<char *>(&compression_type), 1);
+    // LOG_INFO("Compression type: {}", compression_type);
+
+    // Decompress the chunk data (NBT format)
+    std::size_t compressed_data_size = chunk_data_length - 1;
+    std::vector<std::uint8_t> compressed_data(compressed_data_size);
+
+    file.read(reinterpret_cast<char *>(compressed_data.data()), compressed_data_size);
+
+    // LOG_INFO("No segfaults yay");
+
+    // Test chunks are compressed using zlib
+    std::vector<std::uint8_t> decompressed_data;
+    z_stream zs;
+
+    memset(&zs, 0, sizeof(zs));
+
+    if (inflateInit(&zs) != Z_OK) {
+        LOG_WARN("zlib failed to initialise");
+        return;
+    }
+
+    zs.next_in = (Bytef *)compressed_data.data();
+    zs.avail_in = compressed_data_size;
+
+    int ret;
+    char buffer[32768];
+
+    do {
+        zs.next_out = reinterpret_cast<Bytef *>(buffer);
+        zs.avail_out = sizeof(buffer);
+
+        ret = inflate(&zs, 0);
+
+        if (decompressed_data.size() < zs.total_out) {
+            decompressed_data.insert(decompressed_data.end(), buffer, buffer + (sizeof(buffer) - zs.avail_out));
+        }
+    } while (ret == Z_OK);
+
+    inflateEnd(&zs);
+
+    if (ret != Z_STREAM_END) {
+        LOG_WARN("Decompression was unsuccessful");
+    }
+
+    // FINAL PART- decompress the nbt file (assume java edition so big endian)
+    nlohmann::json js;
+    int decompressed_data_size = decompressed_data.size();
+
+    parser::NBTParser::parse(js, decompressed_data);
+
+    FileUtility::save_json(js, json_filename);
 }
 
 void ChunkManager::load_chunks(Camera *camera) {

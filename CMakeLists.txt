@@ -19,6 +19,7 @@ find_package(PkgConfig REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Boost REQUIRED)
 find_package(TBB REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(FastNoise2 CONFIG REQUIRED)
 
@@ -43,6 +44,7 @@ target_link_libraries(
           fmt::fmt
           Boost::boost
           TBB::tbb
+          ZLIB::ZLIB
           FastNoise2::FastNoise)
 
 target_compile_options(duck-craft PRIVATE $<$<CONFIG:Release>:-O3 -march=native
@@ -55,11 +57,12 @@ set_property(TARGET duck-craft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE
                                         TRUE)
 target_compile_options(
   duck-craft PRIVATE $<$<CONFIG:Debug>:-O1 -g -fsanitize=address
-                     -fno-omit-frame-pointer>)
+                     -fno-omit-frame-pointer -Wodr>)
 
 target_link_options(duck-craft PRIVATE $<$<CONFIG:Debug>:-fsanitize=address>)
 
-set_property(TARGET duck-craft PROPERTY INTERPROCEDURAL_OPTIMIZATION_DEBUG TRUE)
+set_property(TARGET duck-craft PROPERTY INTERPROCEDURAL_OPTIMIZATION_DEBUG
+                                        FALSE)
 
 target_compile_options(
   duck-craft PRIVATE $<$<CONFIG:Profile>:-O2 -g -fno-omit-frame-pointer

@@ -45,3 +45,9 @@ build/
 
 # ImGUI
 imgui.ini
+
+# Python
+.venv
+
+# Saves
+data/saves/*

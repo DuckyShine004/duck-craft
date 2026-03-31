@@ -22,6 +22,8 @@ class ChunkManager final : public Manager {
 
     void generate_chunk_at_local_position(int local_x, int local_y, int local_z);
 
+    void load_chunk(engine::camera::Camera *camera);
+
     void generate_height_map(int local_chunk_x, int local_chunk_z);
 
     void load_chunks(engine::camera::Camera *camera);

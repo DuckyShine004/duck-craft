@@ -23,8 +23,6 @@ std::string FileUtility::get_file_to_string(const std::string &filename) {
 
     buffer << file.rdbuf();
 
-    file.close();
-
     return buffer.str();
 }
 
@@ -112,9 +110,7 @@ std::string FileUtility::get_shader_file(const std::string &path) {
         }
     }
 
-    LOG_DEBUG("Buffer: {}", buffer.str());
-
-    file.close();
+    // LOG_DEBUG("Buffer: {}", buffer.str());
 
     return buffer.str();
 }

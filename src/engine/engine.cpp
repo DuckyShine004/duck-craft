@@ -67,7 +67,8 @@ void Engine::update(GLFWwindow *window, float delta_time) {
 
     Camera *player_camera = camera_manager.get_camera("player");
 
-    chunk_manager.load_chunks(player_camera);
+    chunk_manager.load_chunk(player_camera);
+    // chunk_manager.load_chunks(player_camera);
 
     this->_cloud->update(camera->transform.position);
 
